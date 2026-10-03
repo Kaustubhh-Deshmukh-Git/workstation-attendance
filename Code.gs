@@ -30,6 +30,7 @@ function onOpen() {
   ui.createMenu("🏢 Workstation Attendance")
     .addItem("🚀 Initialize / Refresh System Setup", "setup")
     .addItem("✨ Populate Sample Demo Data", "populateDemoData")
+    .addItem("🔄 Clear System Cache / Refresh Settings", "clearSystemCache")
     .addSeparator()
     .addItem("📧 Send QR Codes to Members", "sendQrCodesToMembers")
     .addItem("📊 Generate Today's Report", "generateTodayReportMenu")
@@ -521,8 +522,8 @@ function markAttendance(qrData, deviceInfo) {
   
   // 3. Fast Config & Time Window Check (Cached, <2ms)
   var config = getConfigMap();
-  var startTime = config["Check-in Start Time"] || "08:00";
-  var endTime = config["Check-in End Time"] || "20:00";
+  var startTime = sanitizeTimeString(config["Check-in Start Time"], "00:00");
+  var endTime = sanitizeTimeString(config["Check-in End Time"], "23:59");
   var allowedRescan = String(config["Allowed Re-scan"] || "No").trim().toLowerCase() === "yes";
   
   var now = new Date();
@@ -985,12 +986,53 @@ function formatHeaderRow(sheet, rowNum, numCols, bgColor) {
   sheet.setRowHeight(rowNum, 32);
 }
 
+/**
+ * Clears in-memory script cache when config or members change.
+ */
+function clearSystemCache() {
+  var cache = CacheService.getScriptCache();
+  cache.remove("APP_CONFIG_MAP");
+  cache.remove("MEMBERS_MAP");
+  try {
+    SpreadsheetApp.getActiveSpreadsheet().toast("System cache refreshed successfully!", "🔄 Cache Cleared", 3);
+  } catch (e) {}
+}
+
+/**
+ * Sanitizes any Date object, ISO string, or time string into standard 'HH:mm' 24-hr format.
+ */
+function sanitizeTimeString(val, defaultVal) {
+  if (!val) return defaultVal || "00:00";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, SCRIPT_TIMEZONE, "HH:mm");
+  }
+  var s = String(val).trim();
+  if (s.indexOf("T") !== -1 || s.indexOf("1899") !== -1 || s.indexOf("Z") !== -1) {
+    try {
+      var d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        return Utilities.formatDate(d, SCRIPT_TIMEZONE, "HH:mm");
+      }
+    } catch (e) {}
+  }
+  var match = s.match(/^(\d{1,2}):(\d{2})/);
+  if (match) {
+    var h = match[1].length === 1 ? "0" + match[1] : match[1];
+    var m = match[2];
+    return h + ":" + m;
+  }
+  return defaultVal || "00:00";
+}
+
 function getConfigMap() {
   var cache = CacheService.getScriptCache();
   var cached = cache.get("APP_CONFIG_MAP");
   if (cached) {
     try {
-      return JSON.parse(cached);
+      var parsed = JSON.parse(cached);
+      if (parsed["Check-in Start Time"]) parsed["Check-in Start Time"] = sanitizeTimeString(parsed["Check-in Start Time"], "00:00");
+      if (parsed["Check-in End Time"]) parsed["Check-in End Time"] = sanitizeTimeString(parsed["Check-in End Time"], "23:59");
+      return parsed;
     } catch (e) {}
   }
   
@@ -1004,12 +1046,20 @@ function getConfigMap() {
     var key = String(data[i][0]).trim();
     var val = data[i][1];
     if (key) {
+      if (val instanceof Date) {
+        val = Utilities.formatDate(val, SCRIPT_TIMEZONE, "HH:mm");
+      } else if (typeof val === "string" && key.indexOf("Time") !== -1) {
+        val = sanitizeTimeString(val, val);
+      }
       config[key] = val;
     }
   }
   
+  if (!config["Check-in Start Time"]) config["Check-in Start Time"] = "00:00";
+  if (!config["Check-in End Time"]) config["Check-in End Time"] = "23:59";
+  
   try {
-    cache.put("APP_CONFIG_MAP", JSON.stringify(config), 21600); // Cache for 6 hours
+    cache.put("APP_CONFIG_MAP", JSON.stringify(config), 3600); // Cache for 1 hour
   } catch (e) {}
   
   return config;
