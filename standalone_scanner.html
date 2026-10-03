@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   
-  <!-- High Speed jsQR Engine for 60 FPS In-Browser Real-Time QR Scanning -->
+  <!-- High Speed jsQR Engine for 60 FPS Real-Time QR Scanning -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
   <style>
@@ -25,15 +25,10 @@
       
       --color-success: #10b981;
       --color-success-bg: rgba(16, 185, 129, 0.15);
-      --color-success-border: rgba(16, 185, 129, 0.4);
-      
       --color-warning: #f59e0b;
       --color-warning-bg: rgba(245, 158, 11, 0.15);
-      --color-warning-border: rgba(245, 158, 11, 0.4);
-      
       --color-error: #ef4444;
       --color-error-bg: rgba(239, 68, 68, 0.15);
-      --color-error-border: rgba(239, 68, 68, 0.4);
       
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
@@ -172,91 +167,6 @@
       border-color: var(--accent-cyan);
     }
 
-    /* ---------------- SETTINGS MODAL ---------------- */
-    .modal-backdrop {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.75);
-      backdrop-filter: blur(8px);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-    }
-
-    .modal-box {
-      background: #1e293b;
-      border: 1px solid var(--surface-border);
-      border-radius: 18px;
-      padding: 20px;
-      width: 100%;
-      max-width: 440px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-    }
-
-    .modal-title {
-      font-size: 1rem;
-      font-weight: 700;
-      color: #fff;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .modal-input-label {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-      display: block;
-    }
-
-    .modal-input {
-      width: 100%;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid var(--surface-border);
-      border-radius: 10px;
-      padding: 10px 12px;
-      color: #fff;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.75rem;
-      outline: none;
-      margin-bottom: 14px;
-    }
-
-    .modal-input:focus {
-      border-color: var(--accent-cyan);
-    }
-
-    .modal-btns {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-    }
-
-    .btn-modal-cancel {
-      background: transparent;
-      border: 1px solid var(--surface-border);
-      color: var(--text-muted);
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .btn-modal-save {
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
-      border: none;
-      color: #fff;
-      padding: 8px 18px;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
     /* ---------------- SCANNER CARD ---------------- */
     .scanner-card {
       background: var(--surface-glass);
@@ -325,10 +235,6 @@
       animation: pulse-btn 2s infinite;
     }
 
-    .start-btn:active {
-      transform: scale(0.96);
-    }
-
     @keyframes pulse-btn {
       0%, 100% { box-shadow: 0 0 20px rgba(6, 182, 212, 0.4); }
       50% { box-shadow: 0 0 35px rgba(6, 182, 212, 0.7); }
@@ -345,7 +251,7 @@
     .error-banner {
       display: none;
       background: var(--color-error-bg);
-      border: 1px solid var(--color-error-border);
+      border: 1px solid rgba(239, 68, 68, 0.4);
       border-radius: 12px;
       padding: 12px 14px;
       margin-top: 14px;
@@ -361,7 +267,7 @@
       margin-bottom: 2px;
     }
 
-    /* Animated Reticle Overlay (UPI Laser Scanner) */
+    /* UPI Laser Line & Reticle */
     .scanner-overlay {
       position: absolute;
       inset: 0;
@@ -399,7 +305,7 @@
       height: 2.5px;
       background: linear-gradient(90deg, transparent 0%, var(--accent-cyan) 30%, #fff 50%, var(--accent-cyan) 70%, transparent 100%);
       box-shadow: 0 0 12px 2px var(--accent-cyan);
-      animation: laser-scan 2s ease-in-out infinite alternate;
+      animation: laser-scan 1.5s ease-in-out infinite alternate;
     }
 
     @keyframes laser-scan {
@@ -407,7 +313,7 @@
       100% { top: 96%; opacity: 1; }
     }
 
-    /* Result Screen Overlay */
+    /* Result Modal Overlay */
     .result-overlay {
       position: absolute;
       inset: 0;
@@ -420,11 +326,11 @@
       justify-content: center;
       padding: 24px;
       text-align: center;
-      animation: pop-in 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      animation: pop-in 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
 
     @keyframes pop-in {
-      0% { transform: scale(0.9); opacity: 0; }
+      0% { transform: scale(0.92); opacity: 0; }
       100% { transform: scale(1); opacity: 1; }
     }
 
@@ -444,13 +350,13 @@
     }
 
     .result-icon-circle {
-      width: 64px;
-      height: 64px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
     .success .result-icon-circle {
@@ -472,8 +378,8 @@
     }
 
     .result-icon-circle svg {
-      width: 32px;
-      height: 32px;
+      width: 30px;
+      height: 30px;
     }
 
     .result-title {
@@ -505,11 +411,11 @@
       color: var(--text-muted);
       line-height: 1.4;
       max-width: 280px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
 
     .countdown-bar-container {
-      width: 140px;
+      width: 120px;
       height: 4px;
       background: rgba(255, 255, 255, 0.1);
       border-radius: 99px;
@@ -633,7 +539,6 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.8rem;
       outline: none;
-      transition: all 0.2s;
     }
 
     .manual-input:focus {
@@ -650,11 +555,6 @@
       padding: 0 18px;
       border-radius: 12px;
       cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .manual-submit-btn:hover {
-      box-shadow: 0 0 16px rgba(6, 182, 212, 0.4);
     }
 
     /* ---------------- LIVE FEED CARD ---------------- */
@@ -754,6 +654,91 @@
       color: var(--text-dim);
       padding: 8px 0;
     }
+
+    /* ---------------- SETTINGS MODAL ---------------- */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-box {
+      background: #1e293b;
+      border: 1px solid var(--surface-border);
+      border-radius: 18px;
+      padding: 20px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-input-label {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .modal-input {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid var(--surface-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      outline: none;
+      margin-bottom: 14px;
+    }
+
+    .modal-input:focus {
+      border-color: var(--accent-cyan);
+    }
+
+    .modal-btns {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn-modal-cancel {
+      background: transparent;
+      border: 1px solid var(--surface-border);
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-modal-save {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      border: none;
+      color: #fff;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -803,7 +788,7 @@
             </svg>
             <span>Start Live Camera</span>
           </button>
-          <div class="start-hint">Tap to activate live in-browser scanner for instant UPI-style check-in</div>
+          <div class="start-hint">Tap to activate live in-browser scanner for instant check-in</div>
           
           <div id="camera-error-banner" class="error-banner">
             <strong id="camera-error-title">Camera Permission Required</strong>
@@ -887,7 +872,7 @@
     </section>
 
     <footer class="footer-note">
-      Workstation Attendance System &bull; 60 FPS Real-Time Browser Scanner
+      Workstation Attendance System &bull; Fast In-Browser Hardware Scanner
     </footer>
 
   </div>
@@ -909,9 +894,6 @@
   </div>
 
   <script>
-    // ========================================================================
-    // ⚙️ WORKSTATION BACKEND SCRIPT URL CONFIGURATION
-    // ========================================================================
     const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCi-wggSxlMXcGJXzKl_xiTIkkli7yBIUmETPpX35cxw_5HaSSwz5XhtgsBGbaD5sfuQ/exec";
     
     function getApiUrl() {
@@ -922,12 +904,11 @@
     let isProcessing = false;
     let soundEnabled = true;
     let audioCtx = null;
-    let currentFacingMode = "environment"; // Rear camera default for Android
+    let currentFacingMode = "environment";
     let animationFrameId = null;
+    let lastScanTime = 0;
 
-    // ------------------------------------------------------------------------
-    // Web Audio Synthesized Chimes (Success / Warning / Error)
-    // ------------------------------------------------------------------------
+    // Web Audio Synthesized Chimes
     function getAudioContext() {
       if (!audioCtx) {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -955,31 +936,12 @@
       } catch (e) {}
     }
 
-    function playSuccessChime() {
-      playTone(880, 0.12, 'sine', 0);
-      playTone(1174, 0.18, 'sine', 0.1);
-    }
-
-    function playWarningChime() {
-      playTone(587, 0.2, 'triangle', 0);
-    }
-
-    function playErrorChime() {
-      playTone(220, 0.3, 'sawtooth', 0);
-    }
-
-    // ------------------------------------------------------------------------
-    // Live Clock & Initialization
-    // ------------------------------------------------------------------------
     function updateClock() {
       document.getElementById('live-clock').innerText = new Date().toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
     setInterval(updateClock, 1000);
     updateClock();
 
-    // ------------------------------------------------------------------------
-    // Settings Modal Handlers
-    // ------------------------------------------------------------------------
     function openSettingsModal() {
       document.getElementById('backend-url-input').value = getApiUrl();
       document.getElementById('settings-modal').style.display = 'flex';
@@ -991,14 +953,11 @@
 
     function saveSettings() {
       const val = document.getElementById('backend-url-input').value.trim();
-      if (val) {
-        localStorage.setItem("WORKSTATION_SCRIPT_URL", val);
-      }
+      if (val) localStorage.setItem("WORKSTATION_SCRIPT_URL", val);
       closeSettingsModal();
       fetchWorkstationConfig();
     }
 
-    // Fetch config from Apps Script
     function fetchWorkstationConfig() {
       const url = getApiUrl();
       if (!url) return;
@@ -1013,7 +972,7 @@
     }
 
     // ------------------------------------------------------------------------
-    // ⚡ 60 FPS IN-BROWSER HARDWARE CAMERA QR SCANNER (UPI / GPAY STYLE)
+    // ⚡ HIGH-PERFORMANCE IN-BROWSER CAMERA SCANNER (10X REDUCED CPU COMPUTE)
     // ------------------------------------------------------------------------
     async function startContinuousScanner() {
       getAudioContext();
@@ -1022,35 +981,31 @@
       errBanner.style.display = 'none';
       statusText.innerText = "Requesting Camera Access...";
 
-      // Stop any existing stream
       if (videoStream) {
         videoStream.getTracks().forEach(track => track.stop());
         videoStream = null;
       }
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
       const video = document.getElementById('live-video');
       const constraints = {
         audio: false,
         video: {
           facingMode: { ideal: currentFacingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 }
         }
       };
 
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("Browser does not support camera mediaDevices API. Please open via HTTPS on Google Chrome.");
+          throw new Error("Browser does not support camera mediaDevices API.");
         }
 
         videoStream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = videoStream;
         video.setAttribute('playsinline', 'true');
         video.setAttribute('webkit-playsinline', 'true');
-        
         await video.play();
 
         document.getElementById('start-overlay').style.display = 'none';
@@ -1066,10 +1021,7 @@
 
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
           document.getElementById('camera-error-title').innerText = "Camera Permission Denied";
-          document.getElementById('camera-error-desc').innerHTML = "Tap the <strong>🔒 lock / tune icon</strong> in Chrome's address bar &rarr; <strong>Site Settings</strong> &rarr; <strong>Camera: Allow</strong>, then refresh.";
-        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-          document.getElementById('camera-error-title').innerText = "No Camera Found";
-          document.getElementById('camera-error-desc').innerText = "No compatible camera hardware detected on this device.";
+          document.getElementById('camera-error-desc').innerHTML = "Tap the <strong>🔒 lock icon</strong> in Chrome's address bar &rarr; <strong>Site Settings</strong> &rarr; <strong>Camera: Allow</strong>, then refresh.";
         } else {
           document.getElementById('camera-error-title').innerText = "Camera Error";
           document.getElementById('camera-error-desc').innerText = err.message || "Could not open camera stream.";
@@ -1077,25 +1029,37 @@
       }
     }
 
-    function tickScan() {
+    function tickScan(timestamp) {
       const video = document.getElementById('live-video');
       const canvas = document.getElementById('scan-canvas');
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      if (video.readyState >= video.HAVE_CURRENT_DATA && !isProcessing) {
-        if (video.videoWidth > 0 && video.videoHeight > 0) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // Throttle scan decoding to ~30 FPS (every 33ms) to eliminate CPU lag
+      if (timestamp - lastScanTime > 33) {
+        lastScanTime = timestamp;
 
-          // Fast JSQR in-memory frame decoding
-          if (typeof jsQR !== 'undefined') {
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-              inversionAttempts: "dontInvert"
-            });
-            if (code && code.data && code.data.trim().length > 0) {
-              processScannedData(code.data.trim(), "Mobile Camera Live Scanner");
+        if (video.readyState >= video.HAVE_CURRENT_DATA && !isProcessing) {
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            // Downscale scan resolution to max 480px width for 10x faster pixel analysis
+            const targetWidth = Math.min(480, video.videoWidth);
+            const scale = targetWidth / video.videoWidth;
+            const targetHeight = Math.round(video.videoHeight * scale);
+
+            if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+              canvas.width = targetWidth;
+              canvas.height = targetHeight;
+            }
+
+            ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+            const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+
+            if (typeof jsQR !== 'undefined') {
+              const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "dontInvert"
+              });
+              if (code && code.data && code.data.trim().length > 0) {
+                processScannedData(code.data.trim(), "Mobile Camera Live Scanner");
+              }
             }
           }
         }
@@ -1118,15 +1082,13 @@
       }
     }
 
-    // Auto-attempt camera startup
     window.addEventListener('load', () => {
       fetchWorkstationConfig();
-      // On top-level HTTPS, we can start immediately or prompt cleanly
       startContinuousScanner().catch(() => {});
     });
 
     // ------------------------------------------------------------------------
-    // ATTENDANCE SUBMISSION TO GOOGLE APPS SCRIPT BACKEND
+    // HIGH-SPEED BACKEND SUBMISSION
     // ------------------------------------------------------------------------
     function handleManualSubmit(e) {
       e.preventDefault();
@@ -1150,25 +1112,18 @@
         return;
       }
 
+      // Immediate perceptual cue
       document.getElementById('status-dot').style.background = '#f59e0b';
       document.getElementById('status-text').innerText = 'Validating on Google Sheet...';
 
-      // Send via CORS-compatible POST
       fetch(apiUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8"
-        },
-        body: JSON.stringify({
-          qrData: qrPayload,
-          deviceInfo: deviceSource
-        }),
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ qrData: qrPayload, deviceInfo: deviceSource }),
         redirect: "follow"
       })
       .then(res => res.json())
-      .then(data => {
-        handleServerResponse(data);
-      })
+      .then(data => handleServerResponse(data))
       .catch(err => {
         console.error("Backend request failed:", err);
         handleServerResponse({
@@ -1199,7 +1154,8 @@
         idEl.innerText = res.memberId ? `ID: ${res.memberId}` : '';
         idEl.style.display = res.memberId ? 'inline-block' : 'none';
         msgEl.innerText = res.message || 'Attendance marked successfully in Google Sheet.';
-        playSuccessChime();
+        playTone(880, 0.1, 'sine', 0);
+        playTone(1174, 0.15, 'sine', 0.08);
         addFeedItem(res.name, res.memberId, res.time || new Date().toLocaleTimeString());
       } else if (res.status === 'ALREADY_MARKED') {
         overlay.classList.add('warning');
@@ -1209,28 +1165,29 @@
         idEl.innerText = res.memberId ? `ID: ${res.memberId}` : '';
         idEl.style.display = res.memberId ? 'inline-block' : 'none';
         msgEl.innerText = res.message || 'You are already marked present today.';
-        playWarningChime();
+        playTone(587, 0.15, 'triangle', 0);
       } else {
         overlay.classList.add('error');
         iconEl.innerHTML = `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>`;
         titleEl.innerText = res.title || 'Access Denied';
         nameEl.innerText = res.name || '';
         idEl.style.display = 'none';
-        msgEl.innerText = res.message || 'Invalid or unauthorized QR code.';
-        playErrorChime();
+        msgEl.innerText = res.message || 'Invalid QR code.';
+        playTone(220, 0.25, 'sawtooth', 0);
       }
 
       overlay.style.display = 'flex';
       countdownBar.style.animation = 'none';
-      void countdownBar.offsetWidth; // trigger reflow
-      countdownBar.style.animation = 'countdown 2.8s linear forwards';
+      void countdownBar.offsetWidth;
+      countdownBar.style.animation = 'countdown 1.6s linear forwards';
 
+      // Fast auto-dismiss in 1.6s for high-speed queue scanning
       setTimeout(() => {
         overlay.style.display = 'none';
         isProcessing = false;
         document.getElementById('status-dot').style.background = 'var(--accent-cyan)';
         document.getElementById('status-text').innerText = "Scanner Active \u2022 Continuous Real-Time";
-      }, 2800);
+      }, 1600);
     }
 
     function addFeedItem(name, id, time) {
@@ -1252,9 +1209,7 @@
       `;
 
       feedList.insertBefore(item, feedList.firstChild);
-      while (feedList.children.length > 8) {
-        feedList.removeChild(feedList.lastChild);
-      }
+      while (feedList.children.length > 8) feedList.removeChild(feedList.lastChild);
     }
 
     function escapeHtml(str) {

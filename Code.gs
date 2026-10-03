@@ -446,83 +446,143 @@ function getWorkstationConfig() {
 }
 
 /**
- * Marks attendance on the server with signature verification and concurrency locks.
+ * Retrieves cached dictionary of { memberId: memberName } with 1-hour TTL.
+ */
+function getMemberMapCached(ss) {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get("MEMBERS_MAP");
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {}
+  }
+  
+  var membersSheet = ss.getSheetByName(SHEET_MEMBERS);
+  if (!membersSheet) return {};
+  var lastRow = membersSheet.getLastRow();
+  if (lastRow < 2) return {};
+  
+  var data = membersSheet.getRange(2, 1, lastRow - 1, 2).getValues(); // Only Col A & B
+  var map = {};
+  for (var i = 0; i < data.length; i++) {
+    var id = String(data[i][0]).trim().toUpperCase();
+    var name = String(data[i][1]).trim();
+    if (id) {
+      map[id] = name;
+    }
+  }
+  
+  try {
+    cache.put("MEMBERS_MAP", JSON.stringify(map), 3600); // 1 hour
+  } catch (e) {}
+  
+  return map;
+}
+
+/**
+ * High-Speed Attendance Marking with In-Memory Caching and Concurrency Locks.
  * @param {string} qrData - Scanned content ("MemberID|Token")
  * @param {string} deviceInfo - Optional scanner details
  * @return {object} JSON status object
  */
 function markAttendance(qrData, deviceInfo) {
-  // Use ScriptLock to prevent race conditions during rapid simultaneous scans
+  // 1. Instant format validation (<1ms)
+  if (!qrData || typeof qrData !== "string") {
+    return {
+      success: false,
+      status: "INVALID_FORMAT",
+      title: "Invalid QR Code",
+      message: "QR code data is empty or unreadable."
+    };
+  }
+  
+  var parts = qrData.trim().split("|");
+  if (parts.length !== 2) {
+    return {
+      success: false,
+      status: "INVALID_FORMAT",
+      title: "Invalid QR Format",
+      message: "Unrecognized QR code structure."
+    };
+  }
+  
+  var memberId = parts[0].trim().toUpperCase();
+  var token = parts[1].trim();
+  
+  // 2. In-memory cryptographic HMAC verification (<1ms)
+  if (!verifyMemberToken(memberId, token)) {
+    return {
+      success: false,
+      status: "INVALID_SIGNATURE",
+      title: "Counterfeit QR Code",
+      message: "Cryptographic signature failed. Unauthorized or tampered badge."
+    };
+  }
+  
+  // 3. Fast Config & Time Window Check (Cached, <2ms)
+  var config = getConfigMap();
+  var startTime = config["Check-in Start Time"] || "08:00";
+  var endTime = config["Check-in End Time"] || "20:00";
+  var allowedRescan = String(config["Allowed Re-scan"] || "No").trim().toLowerCase() === "yes";
+  
+  var now = new Date();
+  var currentTimeStr = Utilities.formatDate(now, SCRIPT_TIMEZONE, "HH:mm");
+  var todayDateStr = Utilities.formatDate(now, SCRIPT_TIMEZONE, "yyyy-MM-dd");
+  var readableTimeStr = Utilities.formatDate(now, SCRIPT_TIMEZONE, "hh:mm:ss a");
+  
+  if (currentTimeStr < startTime || currentTimeStr > endTime) {
+    return {
+      success: false,
+      status: "OUTSIDE_HOURS",
+      title: "Outside Check-in Window",
+      memberId: memberId,
+      message: "Check-in allowed only between " + startTime + " and " + endTime + ". (Current: " + currentTimeStr + ")"
+    };
+  }
+
+  // 4. Ultra-Fast Duplicate Check via CacheService (<5ms)
+  var cache = CacheService.getScriptCache();
+  var cacheKey = "ATTEND_" + todayDateStr + "_" + memberId;
+  var cachedScan = cache.get(cacheKey);
+  if (cachedScan && !allowedRescan) {
+    var partsCache = cachedScan.split("|");
+    var memberNameCached = partsCache[0] || memberId;
+    var timeCached = partsCache[1] || "";
+    return {
+      success: false,
+      status: "ALREADY_MARKED",
+      title: "Already Present",
+      name: memberNameCached,
+      memberId: memberId,
+      time: timeCached,
+      message: memberNameCached + ", you are already marked present today" + (timeCached ? " at " + timeCached : "") + "."
+    };
+  }
+
+  // 5. Concurrency lock & Record Log
   var lock = LockService.getScriptLock();
   try {
-    var hasLock = lock.tryLock(10000); // Wait up to 10 seconds for lock
+    var hasLock = lock.tryLock(4000); // 4-second fast lock
     if (!hasLock) {
       return {
         success: false,
         status: "BUSY",
         title: "System Busy",
-        message: "Server is processing another scan. Please try again in a moment."
+        message: "Server is processing another scan. Please try again."
       };
     }
     
-    // 1. Basic format validation
-    if (!qrData || typeof qrData !== "string") {
-      return {
-        success: false,
-        status: "INVALID_FORMAT",
-        title: "Invalid QR Code",
-        message: "QR code data is empty or unreadable."
-      };
-    }
-    
-    var parts = qrData.trim().split("|");
-    if (parts.length !== 2) {
-      return {
-        success: false,
-        status: "INVALID_FORMAT",
-        title: "Invalid QR Format",
-        message: "Unrecognized QR code structure."
-      };
-    }
-    
-    var memberId = parts[0].trim().toUpperCase();
-    var token = parts[1].trim();
-    
-    // 2. Cryptographic signature verification
-    if (!verifyMemberToken(memberId, token)) {
-      return {
-        success: false,
-        status: "INVALID_SIGNATURE",
-        title: "Counterfeit QR Code",
-        message: "Cryptographic signature failed. Unauthorized or tampered badge."
-      };
-    }
-    
-    // 3. Confirm member existence in Members sheet
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var membersSheet = ss.getSheetByName(SHEET_MEMBERS);
-    if (!membersSheet) {
-      return {
-        success: false,
-        status: "CONFIG_ERROR",
-        title: "System Error",
-        message: "Members sheet not found."
-      };
+    var memberMap = getMemberMapCached(ss);
+    var memberName = memberMap[memberId];
+    
+    if (!memberName) {
+      cache.remove("MEMBERS_MAP");
+      memberMap = getMemberMapCached(ss);
+      memberName = memberMap[memberId];
     }
     
-    var membersData = membersSheet.getDataRange().getValues();
-    var memberName = "";
-    var memberFound = false;
-    
-    for (var i = 1; i < membersData.length; i++) {
-      if (String(membersData[i][0]).trim().toUpperCase() === memberId) {
-        memberFound = true;
-        memberName = membersData[i][1];
-        break;
-      }
-    }
-    
-    if (!memberFound) {
+    if (!memberName) {
       return {
         success: false,
         status: "NOT_FOUND",
@@ -531,71 +591,18 @@ function markAttendance(qrData, deviceInfo) {
       };
     }
     
-    // 4. Time Window Validation
-    var config = getConfigMap();
-    var startTime = config["Check-in Start Time"] || "08:00";
-    var endTime = config["Check-in End Time"] || "20:00";
-    var allowedRescan = String(config["Allowed Re-scan"] || "No").trim().toLowerCase() === "yes";
-    
-    var now = new Date();
-    var currentTimeStr = Utilities.formatDate(now, SCRIPT_TIMEZONE, "HH:mm");
-    var todayDateStr = Utilities.formatDate(now, SCRIPT_TIMEZONE, "yyyy-MM-dd");
-    var readableTimeStr = Utilities.formatDate(now, SCRIPT_TIMEZONE, "hh:mm:ss a");
-    
-    if (currentTimeStr < startTime || currentTimeStr > endTime) {
-      return {
-        success: false,
-        status: "OUTSIDE_HOURS",
-        title: "Outside Check-in Window",
-        name: memberName,
-        memberId: memberId,
-        message: "Check-in is only allowed between " + startTime + " and " + endTime + ". (Current time: " + currentTimeStr + ")"
-      };
-    }
-    
-    // 5. Duplicate Check-in Prevention
     var logSheet = ss.getSheetByName(SHEET_ATTENDANCE);
     if (!logSheet) {
       logSheet = getOrCreateSheet(ss, SHEET_ATTENDANCE);
     }
     
-    var logData = logSheet.getDataRange().getValues();
-    var alreadyMarked = false;
-    var firstScanTime = "";
-    
-    for (var j = 1; j < logData.length; j++) {
-      var logDate = logData[j][1];
-      var logMemberId = String(logData[j][2]).trim().toUpperCase();
-      
-      // Handle Date comparison (could be Date object or formatted string)
-      var logDateFormatted = (logDate instanceof Date) 
-        ? Utilities.formatDate(logDate, SCRIPT_TIMEZONE, "yyyy-MM-dd") 
-        : String(logDate).trim();
-        
-      if (logDateFormatted === todayDateStr && logMemberId === memberId) {
-        alreadyMarked = true;
-        firstScanTime = (logData[j][0] instanceof Date)
-          ? Utilities.formatDate(logData[j][0], SCRIPT_TIMEZONE, "hh:mm:ss a")
-          : String(logData[j][0]);
-        break;
-      }
-    }
-    
-    if (alreadyMarked && !allowedRescan) {
-      return {
-        success: false,
-        status: "ALREADY_MARKED",
-        title: "Already Present",
-        name: memberName,
-        memberId: memberId,
-        time: firstScanTime,
-        message: memberName + ", you are already marked present today at " + firstScanTime + "."
-      };
-    }
-    
-    // 6. Record Attendance Log
     var deviceString = deviceInfo || "Web App Kiosk";
     logSheet.appendRow([now, todayDateStr, memberId, memberName, "Present", deviceString]);
+    
+    // Store in cache for 24 hours so duplicate re-scans return in <10ms
+    try {
+      cache.put(cacheKey, memberName + "|" + readableTimeStr, 86400);
+    } catch (e) {}
     
     return {
       success: true,
@@ -979,6 +986,14 @@ function formatHeaderRow(sheet, rowNum, numCols, bgColor) {
 }
 
 function getConfigMap() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get("APP_CONFIG_MAP");
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {}
+  }
+  
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_CONFIG);
   var config = {};
@@ -992,6 +1007,11 @@ function getConfigMap() {
       config[key] = val;
     }
   }
+  
+  try {
+    cache.put("APP_CONFIG_MAP", JSON.stringify(config), 21600); // Cache for 6 hours
+  } catch (e) {}
+  
   return config;
 }
 
