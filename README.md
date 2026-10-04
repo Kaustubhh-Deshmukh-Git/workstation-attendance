@@ -119,11 +119,15 @@ d:\Workstation Attendance system\
 
 ### 1. Sending QR Badges to Members (`Feature 1`)
 1. Open the Google Sheet &rarr; Click menu **🏢 Workstation Attendance** &rarr; **📧 Send QR Codes to Members**.
-2. The script will:
-   - Find all members where `Email Sent` is not `Yes`.
-   - Fetch their permanent QR badge image from the API.
-   - Send a rich HTML email with the QR embedded inline and attached as `QR_ID_<MemberID>.png`.
-   - Update `Email Sent` column to `Yes`.
+2. **Standard Gmail vs High Volume (Same-Day 300+ emails)**:
+   - **Gmail (Default)**: Free Google accounts send up to 100 emails/day.
+   - **Brevo API (300 Free/Day)** or **Resend (3,000 Free/Month)**:
+     - Click **🏢 Workstation Attendance** &rarr; **⚡ Email Provider Setup (Brevo / Resend / Gmail)**.
+     - Select **Brevo** or **Resend**, paste your free API key, and click **Save Settings**.
+     - Now you can send 300+ emails in a single click in one day without hitting Gmail quota limits!
+3. **Alternative: Export All QR Badges to Google Drive**:
+   - Click **🏢 Workstation Attendance** &rarr; **📁 Export All QR Badges to Google Drive**.
+   - Generates individual PNG badges (`WS-001_Aarav_Sharma.png`) inside a new Google Drive folder for instant ZIP download or WhatsApp sharing.
 
 ### 2. Adding New Members
 1. Go to the **`Members`** sheet.

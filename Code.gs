@@ -33,6 +33,9 @@ function onOpen() {
     .addItem("🔄 Clear System Cache / Refresh Settings", "clearSystemCache")
     .addSeparator()
     .addItem("📧 Send QR Codes to Members", "sendQrCodesToMembers")
+    .addItem("⚡ Email Provider Setup (Brevo / Resend / Gmail)", "showEmailConfigDialog")
+    .addItem("📁 Export All QR Badges to Google Drive", "exportAllQrsToDrive")
+    .addSeparator()
     .addItem("📊 Generate Today's Report", "generateTodayReportMenu")
     .addItem("⏰ Setup Daily Report Trigger", "setupTriggers")
     .addSeparator()
@@ -65,13 +68,41 @@ function setup() {
       ["Check-in End Time", "20:00", "End of check-in window (HH:mm 24-hr format)"],
       ["Report Generation Time", "21:00", "Daily automated report trigger time (HH:mm 24-hr format)"],
       ["Admin Email", adminEmail, "Recipient email for daily attendance summaries"],
-      ["Allowed Re-scan", "No", "Allow duplicate scans on the same day (Yes/No)"]
+      ["Allowed Re-scan", "No", "Allow duplicate scans on the same day (Yes/No)"],
+      ["Email Provider", "Gmail (Default)", "Email service: 'Gmail (Default)', 'Brevo', or 'Resend'"],
+      ["Email API Key", "", "API Key for Brevo or Resend (bypasses Gmail 100/day limit)"],
+      ["Sender Email", adminEmail, "Sender email address (verified in Brevo/Resend)"],
+      ["Sender Name", "Workstation Admin", "Display name for outgoing QR badge emails"]
     ];
     configSheet.getRange(1, 1, defaultConfigs.length, 3).setValues(defaultConfigs);
     formatHeaderRow(configSheet, 1, 3, "#1A73E8");
     configSheet.setColumnWidth(1, 200);
     configSheet.setColumnWidth(2, 220);
     configSheet.setColumnWidth(3, 360);
+  } else {
+    // Ensure new email provider settings exist in already-created Config sheets
+    var existingConfigs = configSheet.getDataRange().getValues();
+    var existingKeys = {};
+    for (var k = 1; k < existingConfigs.length; k++) {
+      existingKeys[String(existingConfigs[k][0]).trim()] = true;
+    }
+    var newSettings = [];
+    var adminEmailSafe = getAdminEmailSafe();
+    if (!existingKeys["Email Provider"]) {
+      newSettings.push(["Email Provider", "Gmail (Default)", "Email service: 'Gmail (Default)', 'Brevo', or 'Resend'"]);
+    }
+    if (!existingKeys["Email API Key"]) {
+      newSettings.push(["Email API Key", "", "API Key for Brevo or Resend (bypasses Gmail 100/day limit)"]);
+    }
+    if (!existingKeys["Sender Email"]) {
+      newSettings.push(["Sender Email", adminEmailSafe, "Sender email address (verified in Brevo/Resend)"]);
+    }
+    if (!existingKeys["Sender Name"]) {
+      newSettings.push(["Sender Name", "Workstation Admin", "Display name for outgoing QR badge emails"]);
+    }
+    if (newSettings.length > 0) {
+      configSheet.getRange(configSheet.getLastRow() + 1, 1, newSettings.length, 3).setValues(newSettings);
+    }
   }
 
   // 3. Setup Members Sheet
@@ -219,11 +250,12 @@ function generateMissingTokensAndQrs(sheet) {
 }
 
 // ----------------------------------------------------------------------------
-// 3. FEATURE 1: SEND QR CODES BY EMAIL
+// 3. FEATURE 1: SEND QR CODES BY EMAIL (MULTI-PROVIDER: GMAIL, BREVO, RESEND)
 // ----------------------------------------------------------------------------
 
 /**
  * Sends permanent QR ID badges to all members where Email Sent is not "Yes".
+ * Supports Gmail (default 100/day limit), Brevo API (300/day free), and Resend API (3,000/mo free).
  */
 function sendQrCodesToMembers() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -243,11 +275,41 @@ function sendQrCodesToMembers() {
   
   var config = getConfigMap();
   var workstationName = config["Workstation Name"] || "Workstation";
-  var quotaRemaining = MailApp.getRemainingDailyQuota();
+  var provider = String(config["Email Provider"] || "Gmail").trim().toLowerCase();
+  var apiKey = String(config["Email API Key"] || "").trim();
+  var senderEmail = String(config["Sender Email"] || getAdminEmailSafe()).trim();
+  var senderName = String(config["Sender Name"] || (workstationName + " Admin")).trim();
   
-  if (quotaRemaining <= 0) {
-    SpreadsheetApp.getUi().alert("Daily email quota exhausted. Please try again tomorrow.");
+  var isBrevo = provider.indexOf("brevo") !== -1 || apiKey.indexOf("xkeysib-") === 0;
+  var isResend = provider.indexOf("resend") !== -1 || apiKey.indexOf("re_") === 0;
+  
+  // Validation for API services
+  if ((isBrevo || isResend) && !apiKey) {
+    SpreadsheetApp.getUi().alert(
+      "🔑 API Key Required",
+      "You have selected '" + (isBrevo ? "Brevo" : "Resend") + "' as your email provider, but no API Key was found.\n\n" +
+      "Please go to menu:\n" +
+      "🏢 Workstation Attendance > ⚡ Email Provider Setup\n" +
+      "and paste your free API key.",
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
     return;
+  }
+  
+  // Validation for Gmail quota
+  if (!isBrevo && !isResend) {
+    var quotaRemaining = MailApp.getRemainingDailyQuota();
+    if (quotaRemaining <= 0) {
+      SpreadsheetApp.getUi().alert(
+        "⏳ Gmail Daily Quota Reached",
+        "Your Google Account's daily email sending quota has been reached for today.\n\n" +
+        "🚀 To send more emails immediately today:\n" +
+        "1. Create a free account on Brevo (300 free emails/day) or Resend (3,000/mo free).\n" +
+        "2. Click '🏢 Workstation Attendance' > '⚡ Email Provider Setup' to add your free key.",
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+      return;
+    }
   }
   
   var data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
@@ -255,6 +317,7 @@ function sendQrCodesToMembers() {
   var skipCount = 0;
   var errorCount = 0;
   var errors = [];
+  var providerLabel = isBrevo ? "Brevo API" : (isResend ? "Resend API" : "Gmail");
   
   for (var i = 0; i < data.length; i++) {
     var memberId = data[i][0];
@@ -282,20 +345,29 @@ function sendQrCodesToMembers() {
         throw new Error("Failed to fetch QR image from API (HTTP " + response.getResponseCode() + ")");
       }
       var qrBlob = response.getBlob().setName("QR_ID_" + memberId + ".png");
-      
-      // Compose HTML Email Body
       var subject = "🎫 Your Permanent Workstation Access QR Badge - " + workstationName;
-      var htmlBody = buildQrEmailHtml(name, memberId, workstationName);
       
-      MailApp.sendEmail({
-        to: email,
-        subject: subject,
-        htmlBody: htmlBody,
-        inlineImages: {
-          qrImage: qrBlob
-        },
-        attachments: [qrBlob]
-      });
+      if (isBrevo) {
+        // Send via Brevo HTTP API
+        var htmlBody = buildQrEmailHtml(name, memberId, workstationName, false, qrUrl);
+        sendViaBrevoApi(apiKey, senderEmail, senderName, email, name, subject, htmlBody, qrBlob, memberId);
+      } else if (isResend) {
+        // Send via Resend HTTP API
+        var htmlBody = buildQrEmailHtml(name, memberId, workstationName, false, qrUrl);
+        sendViaResendApi(apiKey, senderEmail, senderName, email, subject, htmlBody, qrBlob, memberId);
+      } else {
+        // Send via Google Gmail App
+        var htmlBody = buildQrEmailHtml(name, memberId, workstationName, true, qrUrl);
+        MailApp.sendEmail({
+          to: email,
+          subject: subject,
+          htmlBody: htmlBody,
+          inlineImages: {
+            qrImage: qrBlob
+          },
+          attachments: [qrBlob]
+        });
+      }
       
       // Update Email Sent status
       data[i][5] = "Yes";
@@ -310,7 +382,7 @@ function sendQrCodesToMembers() {
   // Persist updated "Email Sent" status back to sheet
   sheet.getRange(2, 1, data.length, 6).setValues(data);
   
-  var msg = "Email Dispatch Results:\n" +
+  var msg = "Provider: " + providerLabel + "\n\n" +
             "• Sent successfully: " + sentCount + "\n" +
             "• Already sent (skipped): " + skipCount + "\n" +
             "• Errors: " + errorCount;
@@ -319,13 +391,105 @@ function sendQrCodesToMembers() {
     msg += "\n\nError details:\n" + errors.slice(0, 5).join("\n");
   }
   
-  SpreadsheetApp.getUi().alert("📧 QR Badges Dispatch", msg, SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert("📧 QR Badges Dispatch Complete", msg, SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/**
+ * Dispatches an email via Brevo's REST API (v3).
+ * Brevo Free tier allows 300 emails/day with no credit card required.
+ */
+function sendViaBrevoApi(apiKey, senderEmail, senderName, toEmail, toName, subject, htmlContent, qrBlob, memberId) {
+  var url = "https://api.brevo.com/v3/smtp/email";
+  var base64Img = Utilities.base64Encode(qrBlob.getBytes());
+  
+  var payload = {
+    sender: {
+      name: senderName || "Workstation Attendance",
+      email: senderEmail
+    },
+    to: [
+      {
+        email: toEmail,
+        name: toName || toEmail
+      }
+    ],
+    subject: subject,
+    htmlContent: htmlContent,
+    attachment: [
+      {
+        content: base64Img,
+        name: "QR_ID_" + memberId + ".png"
+      }
+    ]
+  };
+
+  var options = {
+    method: "post",
+    headers: {
+      "api-key": apiKey,
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  var response = UrlFetchApp.fetch(url, options);
+  var code = response.getResponseCode();
+  if (code < 200 || code >= 300) {
+    var err = response.getContentText();
+    throw new Error("Brevo Error (" + code + "): " + err);
+  }
+  return JSON.parse(response.getContentText());
+}
+
+/**
+ * Dispatches an email via Resend's REST API.
+ * Resend Free tier provides 3,000 emails/month free.
+ */
+function sendViaResendApi(apiKey, senderEmail, senderName, toEmail, subject, htmlContent, qrBlob, memberId) {
+  var url = "https://api.resend.com/emails";
+  var base64Img = Utilities.base64Encode(qrBlob.getBytes());
+  
+  var fromAddress = senderName ? (senderName + " <" + senderEmail + ">") : senderEmail;
+  var payload = {
+    from: fromAddress,
+    to: [toEmail],
+    subject: subject,
+    html: htmlContent,
+    attachments: [
+      {
+        filename: "QR_ID_" + memberId + ".png",
+        content: base64Img
+      }
+    ]
+  };
+
+  var options = {
+    method: "post",
+    headers: {
+      "Authorization": "Bearer " + apiKey,
+      "Content-Type": "application/json"
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  var response = UrlFetchApp.fetch(url, options);
+  var code = response.getResponseCode();
+  if (code < 200 || code >= 300) {
+    var err = response.getContentText();
+    throw new Error("Resend Error (" + code + "): " + err);
+  }
+  return JSON.parse(response.getContentText());
 }
 
 /**
  * Builds a styled HTML email template for the QR badge.
  */
-function buildQrEmailHtml(name, memberId, workstationName) {
+function buildQrEmailHtml(name, memberId, workstationName, isInlineCid, qrImageUrl) {
+  var imageSrc = isInlineCid ? "cid:qrImage" : escapeHtml(qrImageUrl);
+  
   return '<!DOCTYPE html>' +
   '<html>' +
   '<head><meta charset="utf-8"></head>' +
@@ -350,7 +514,7 @@ function buildQrEmailHtml(name, memberId, workstationName) {
   '              </p>' +
   '              <!-- QR Badge Card -->' +
   '              <div style="background-color:#F8FAFC; border:2px dashed #CBD5E1; border-radius:10px; padding:20px; display:inline-block; margin:10px auto;">' +
-  '                <img src="cid:qrImage" width="220" height="220" alt="Workstation QR Code" style="display:block; margin:0 auto; border-radius:6px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,0.05);" />' +
+  '                <img src="' + imageSrc + '" width="220" height="220" alt="Workstation QR Code" style="display:block; margin:0 auto; border-radius:6px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,0.05);" />' +
   '                <div style="margin-top:12px; font-size:15px; font-weight:700; color:#1E3A8A; letter-spacing:1px;">ID: ' + escapeHtml(memberId) + '</div>' +
   '                <div style="font-size:12px; color:#64748B; margin-top:2px;">' + escapeHtml(name) + '</div>' +
   '              </div>' +
@@ -378,6 +542,190 @@ function buildQrEmailHtml(name, memberId, workstationName) {
   '  </table>' +
   '</body>' +
   '</html>';
+}
+
+/**
+ * Exports all member QR codes as individual PNG images inside a new Google Drive folder.
+ */
+function exportAllQrsToDrive() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_MEMBERS);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert("Members sheet not found. Please run Setup first.");
+    return;
+  }
+  
+  generateMissingTokensAndQrs(sheet);
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    SpreadsheetApp.getUi().alert("No members found in Members sheet.");
+    return;
+  }
+  
+  var config = getConfigMap();
+  var workstationName = config["Workstation Name"] || "Workstation";
+  var timeStampStr = Utilities.formatDate(new Date(), SCRIPT_TIMEZONE, "yyyy-MM-dd_HHmm");
+  var folderName = "QR_Badges_" + workstationName.replace(/[^a-zA-Z0-9_-]/g, "_") + "_" + timeStampStr;
+  
+  var folder = DriveApp.createFolder(folderName);
+  var data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  var count = 0;
+  var errors = 0;
+  
+  SpreadsheetApp.getActiveSpreadsheet().toast("Generating and saving QR badges to Google Drive...", "⏳ Exporting QRs", 10);
+  
+  for (var i = 0; i < data.length; i++) {
+    var memberId = data[i][0];
+    var name = (data[i][1] || "Member").toString().replace(/[^a-zA-Z0-9_-]/g, "_");
+    var qrUrl = data[i][4];
+    
+    if (memberId && qrUrl) {
+      try {
+        var resp = UrlFetchApp.fetch(qrUrl, { muteHttpExceptions: true });
+        if (resp.getResponseCode() === 200) {
+          var fileName = memberId + "_" + name + ".png";
+          var blob = resp.getBlob().setName(fileName);
+          folder.createFile(blob);
+          count++;
+        }
+      } catch (e) {
+        errors++;
+      }
+    }
+  }
+  
+  var html = 
+    '<div style="font-family:Arial,sans-serif; padding:16px;">' +
+    '  <h3 style="color:#1E3A8A; margin-top:0;">✅ QR Badges Exported to Drive</h3>' +
+    '  <p style="font-size:13px; color:#333;"><strong>' + count + '</strong> QR badges were generated and saved in Google Drive:</p>' +
+    '  <p style="font-size:13px; color:#555;">📁 <strong>' + escapeHtml(folder.getName()) + '</strong></p>' +
+    '  <p style="margin:20px 0;"><a href="' + folder.getUrl() + '" target="_blank" style="background:#2563EB; color:#fff; padding:10px 16px; text-decoration:none; border-radius:6px; font-weight:bold; display:inline-block;">Open Folder in Google Drive &rarr;</a></p>' +
+    '  <p style="font-size:11px; color:#888;">Tip: You can download the entire folder as a ZIP file from Google Drive, or share the folder link directly with your members!</p>' +
+    '</div>';
+    
+  var dialog = HtmlService.createHtmlOutput(html).setWidth(450).setHeight(230);
+  SpreadsheetApp.getUi().showModalDialog(dialog, "📁 Google Drive Export");
+}
+
+/**
+ * Modal dialog for easy email provider configuration (Gmail / Brevo / Resend).
+ */
+function showEmailConfigDialog() {
+  var config = getConfigMap();
+  var currentProvider = config["Email Provider"] || "Gmail (Default)";
+  var currentApiKey = config["Email API Key"] || "";
+  var currentSenderEmail = config["Sender Email"] || getAdminEmailSafe();
+  var currentSenderName = config["Sender Name"] || "Workstation Admin";
+  var quotaRemaining = MailApp.getRemainingDailyQuota();
+  
+  var html = 
+    '<!DOCTYPE html>' +
+    '<html><head><style>' +
+    '  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding:16px 20px; color:#1e293b; background:#f8fafc; margin:0; font-size:13px; }' +
+    '  h2 { font-size:16px; color:#0f172a; margin:0 0 6px 0; font-weight:700; }' +
+    '  p.desc { font-size:12px; color:#64748b; margin:0 0 16px 0; }' +
+    '  .form-group { margin-bottom:12px; }' +
+    '  label { display:block; font-weight:600; font-size:12px; margin-bottom:4px; color:#334155; }' +
+    '  select, input[type="text"] { width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; box-sizing:border-box; background:#fff; }' +
+    '  select:focus, input[type="text"]:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.15); }' +
+    '  .badge-quota { display:inline-block; font-size:11px; padding:3px 8px; border-radius:12px; background:#e0f2fe; color:#0369a1; font-weight:600; margin-bottom:12px; }' +
+    '  .actions { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }' +
+    '  button { padding:8px 16px; border-radius:6px; font-weight:600; font-size:12px; cursor:pointer; border:none; }' +
+    '  .btn-primary { background:#2563eb; color:#fff; }' +
+    '  .btn-primary:hover { background:#1d4ed8; }' +
+    '  .btn-secondary { background:#e2e8f0; color:#334155; }' +
+    '  .link-help { font-size:11px; color:#2563eb; text-decoration:none; margin-top:3px; display:inline-block; }' +
+    '</style></head><body>' +
+    '  <h2>⚡ Email Provider Configuration</h2>' +
+    '  <p class="desc">Send QR badges via Gmail or connect a free email API for sending 300+ emails in 1 day.</p>' +
+    '  <div class="badge-quota">Gmail Remaining Quota: ' + quotaRemaining + ' emails</div>' +
+    '  <form id="cfgForm">' +
+    '    <div class="form-group">' +
+    '      <label>Email Provider</label>' +
+    '      <select id="prov" onchange="toggleApiHelp()">' +
+    '        <option value="Gmail (Default)"' + (currentProvider.indexOf("Gmail") !== -1 ? ' selected' : '') + '>Gmail (Default 100/day free)</option>' +
+    '        <option value="Brevo"' + (currentProvider.indexOf("Brevo") !== -1 ? ' selected' : '') + '>Brevo / Sendinblue (300/day 100% Free)</option>' +
+    '        <option value="Resend"' + (currentProvider.indexOf("Resend") !== -1 ? ' selected' : '') + '>Resend (3,000/month Free)</option>' +
+    '      </select>' +
+    '    </div>' +
+    '    <div class="form-group">' +
+    '      <label>Email API Key (Required for Brevo / Resend)</label>' +
+    '      <input type="text" id="apikey" placeholder="e.g. xkeysib-... or re_..." value="' + escapeHtml(currentApiKey) + '">' +
+    '      <a id="apiHelp" class="link-help" target="_blank" href="https://app.brevo.com/settings/keys/api">👉 Get free Brevo API Key (Instant)</a>' +
+    '    </div>' +
+    '    <div class="form-group">' +
+    '      <label>Sender Email Address</label>' +
+    '      <input type="text" id="senderMail" value="' + escapeHtml(currentSenderEmail) + '">' +
+    '    </div>' +
+    '    <div class="form-group">' +
+    '      <label>Sender Display Name</label>' +
+    '      <input type="text" id="senderName" value="' + escapeHtml(currentSenderName) + '">' +
+    '    </div>' +
+    '    <div class="actions">' +
+    '      <button type="button" class="btn-secondary" onclick="google.script.host.close()">Cancel</button>' +
+    '      <button type="button" class="btn-primary" onclick="saveData()">Save Settings</button>' +
+    '    </div>' +
+    '  </form>' +
+    '  <script>' +
+    '    function toggleApiHelp() {' +
+    '      var p = document.getElementById("prov").value;' +
+    '      var h = document.getElementById("apiHelp");' +
+    '      if (p === "Brevo") { h.href = "https://app.brevo.com/settings/keys/api"; h.innerText = "👉 Get Free Brevo API Key (Instant)"; h.style.display="inline-block"; }' +
+    '      else if (p === "Resend") { h.href = "https://resend.com/api-keys"; h.innerText = "👉 Get Free Resend API Key (Instant)"; h.style.display="inline-block"; }' +
+    '      else { h.style.display="none"; }' +
+    '    }' +
+    '    toggleApiHelp();' +
+    '    function saveData() {' +
+    '      var prov = document.getElementById("prov").value;' +
+    '      var key = document.getElementById("apikey").value.trim();' +
+    '      var email = document.getElementById("senderMail").value.trim();' +
+    '      var name = document.getElementById("senderName").value.trim();' +
+    '      google.script.run.withSuccessHandler(function() {' +
+    '        google.script.host.close();' +
+    '      }).saveEmailConfig(prov, key, email, name);' +
+    '    }' +
+    '  </script>' +
+    '</body></html>';
+    
+  var dialog = HtmlService.createHtmlOutput(html).setWidth(460).setHeight(380);
+  SpreadsheetApp.getUi().showModalDialog(dialog, "⚡ Email Provider Setup");
+}
+
+/**
+ * Saves email configuration directly into Config sheet.
+ */
+function saveEmailConfig(provider, apiKey, senderEmail, senderName) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_CONFIG);
+  if (!sheet) return;
+  
+  var data = sheet.getDataRange().getValues();
+  var map = {
+    "Email Provider": provider,
+    "Email API Key": apiKey,
+    "Sender Email": senderEmail,
+    "Sender Name": senderName
+  };
+  
+  var updatedKeys = {};
+  for (var i = 1; i < data.length; i++) {
+    var key = String(data[i][0]).trim();
+    if (map[key] !== undefined) {
+      sheet.getRange(i + 1, 2).setValue(map[key]);
+      updatedKeys[key] = true;
+    }
+  }
+  
+  // If any key was not already in sheet, append it
+  for (var k in map) {
+    if (!updatedKeys[k]) {
+      sheet.appendRow([k, map[k], "Configured via Email Setup Dialog"]);
+    }
+  }
+  
+  clearSystemCache();
+  SpreadsheetApp.getActiveSpreadsheet().toast("Email provider configured successfully!", "✅ Saved", 3);
 }
 
 // ----------------------------------------------------------------------------
