@@ -39,6 +39,7 @@ function onOpen() {
     .addItem("🔄 Clear System Cache / Refresh Settings", "clearSystemCache")
     .addSeparator()
     .addItem("📧 Send QR Codes to Members", "sendQrCodesToMembers")
+    .addItem("✉️ Switch to Native Gmail (Default - Zero Setup)", "switchToGmailProvider")
     .addItem("⚡ Email Provider Setup (Brevo / Resend / Gmail)", "showEmailConfigDialog")
     .addItem("📁 Export All QR Badges to Google Drive", "exportAllQrsToDrive")
     .addSeparator()
@@ -91,7 +92,16 @@ function setup() {
     var existingConfigs = configSheet.getDataRange().getValues();
     var existingKeys = {};
     for (var k = 1; k < existingConfigs.length; k++) {
-      existingKeys[String(existingConfigs[k][0]).trim()] = true;
+      var key = String(existingConfigs[k][0]).trim();
+      var val = String(existingConfigs[k][1]).trim();
+      existingKeys[key] = true;
+      // Auto-revert to Gmail (Default) if provider was inadvertently set to Resend while using @gmail.com
+      if (key === "Email Provider" && val.toLowerCase().indexOf("resend") !== -1) {
+        configSheet.getRange(k + 1, 2).setValue("Gmail (Default)");
+      }
+      if (key === "Email API Key" && val.indexOf("re_") === 0) {
+        configSheet.getRange(k + 1, 2).setValue("");
+      }
     }
     var newSettings = [];
     var adminEmailSafe = getAdminEmailSafe();
@@ -581,8 +591,28 @@ function sendQrCodesToMembers() {
   var senderEmail = String(config["Sender Email"] || getAdminEmailSafe()).trim();
   var senderName = String(config["Sender Name"] || (workstationName + " Admin")).trim();
   
-  var isBrevo = provider.indexOf("brevo") !== -1 || apiKey.indexOf("xkeysib-") === 0;
-  var isResend = provider.indexOf("resend") !== -1 || apiKey.indexOf("re_") === 0;
+  // Native Gmail is used when provider is Gmail or when no valid external API is requested
+  var isGmail = provider.indexOf("gmail") !== -1 || (!provider.includes("brevo") && !provider.includes("resend"));
+  
+  // Auto-healing: If user is using @gmail.com and Resend was left selected,
+  // automatically route via Native Gmail (Default) to avoid Resend's 403 domain error
+  if (!isGmail && provider.indexOf("resend") !== -1 && (senderEmail.toLowerCase().indexOf("@gmail.com") !== -1 || senderEmail.toLowerCase().indexOf("@yahoo.com") !== -1)) {
+    isGmail = true;
+    provider = "gmail (default)";
+    try {
+      var cfgSheet = ss.getSheetByName(SHEET_CONFIG);
+      if (cfgSheet) {
+        var cfgData = cfgSheet.getDataRange().getValues();
+        for (var c = 1; c < cfgData.length; c++) {
+          if (String(cfgData[c][0]).trim() === "Email Provider") cfgSheet.getRange(c + 1, 2).setValue("Gmail (Default)");
+          if (String(cfgData[c][0]).trim() === "Email API Key" && String(cfgData[c][1]).indexOf("re_") === 0) cfgSheet.getRange(c + 1, 2).setValue("");
+        }
+      }
+    } catch (e) {}
+  }
+  
+  var isBrevo = !isGmail && provider.indexOf("brevo") !== -1 && apiKey.length > 0;
+  var isResend = !isGmail && provider.indexOf("resend") !== -1 && apiKey.length > 0;
   
   // Validation for API services
   if ((isBrevo || isResend) && !apiKey) {
@@ -591,40 +621,21 @@ function sendQrCodesToMembers() {
       "You have selected '" + (isBrevo ? "Brevo" : "Resend") + "' as your email provider, but no API Key was found.\n\n" +
       "Please go to menu:\n" +
       "🏢 Workstation Attendance > ⚡ Email Provider Setup\n" +
-      "and paste your free API key.",
+      "and paste your free API key, or switch to 'Gmail (Default)'.",
       SpreadsheetApp.getUi().ButtonSet.OK
     );
     return;
   }
   
-  // Validation for Resend domain requirements
-  if (isResend) {
-    var lowerSender = senderEmail.toLowerCase();
-    if (lowerSender.indexOf("@gmail.com") !== -1 || lowerSender.indexOf("@yahoo.com") !== -1 || lowerSender.indexOf("@outlook.com") !== -1 || lowerSender.indexOf("@hotmail.com") !== -1) {
-      SpreadsheetApp.getUi().alert(
-        "⚠️ Resend Cannot Send From @gmail.com",
-        "Resend Error: The domain '" + senderEmail.split("@")[1] + "' cannot be verified on Resend.\nResend only sends from custom verified domains (e.g. attendance@yourdomain.com).\n\n" +
-        "👉 Quick Fix (Easiest):\n" +
-        "1. Open menu: '🏢 Workstation Attendance' > '⚡ Email Provider Setup'\n" +
-        "2. Switch Provider to 'Gmail (Default)' and click 'Save Settings'\n" +
-        "3. Re-run 'Send QR Codes to Members' — it sends directly through your Gmail account with 0 setup!\n\n" +
-        "💡 Alternatively: Use 'Brevo' (Sendinblue), which supports free @gmail.com senders.",
-        SpreadsheetApp.getUi().ButtonSet.OK
-      );
-      return;
-    }
-  }
-  
   // Validation for Gmail quota
-  if (!isBrevo && !isResend) {
+  if (isGmail) {
     var quotaRemaining = MailApp.getRemainingDailyQuota();
     if (quotaRemaining <= 0) {
       SpreadsheetApp.getUi().alert(
         "⏳ Gmail Daily Quota Reached",
         "Your Google Account's daily email sending quota has been reached for today.\n\n" +
-        "🚀 To send more emails immediately today:\n" +
-        "1. Create a free account on Brevo (300 free emails/day) or Resend (3,000/mo free).\n" +
-        "2. Click '🏢 Workstation Attendance' > '⚡ Email Provider Setup' to add your free key.",
+        "Google allows 100 emails/day for free Gmail accounts (1,500/day for Google Workspace).\n" +
+        "Quota resets automatically every 24 hours.",
         SpreadsheetApp.getUi().ButtonSet.OK
       );
       return;
@@ -638,7 +649,7 @@ function sendQrCodesToMembers() {
   var skipCount = 0;
   var errorCount = 0;
   var errors = [];
-  var providerLabel = isBrevo ? "Brevo API" : (isResend ? "Resend API" : "Gmail");
+  var providerLabel = isBrevo ? "Brevo API" : (isResend ? "Resend API" : "Native Gmail");
   
   for (var i = 0; i < data.length; i++) {
     var memberId = data[i][colIdx.id];
@@ -1043,6 +1054,10 @@ function saveEmailConfig(provider, apiKey, senderEmail, senderName) {
   if (!sheet) return;
   
   var data = sheet.getDataRange().getValues();
+  // Clear API key if switching to Native Gmail
+  if (String(provider).toLowerCase().indexOf("gmail") !== -1) {
+    apiKey = "";
+  }
   var map = {
     "Email Provider": provider,
     "Email API Key": apiKey,
@@ -1068,6 +1083,43 @@ function saveEmailConfig(provider, apiKey, senderEmail, senderName) {
   
   clearSystemCache();
   SpreadsheetApp.getActiveSpreadsheet().toast("Email provider configured successfully!", "✅ Saved", 3);
+}
+
+/**
+ * 1-Click reset to native Gmail (Default).
+ * Zero API keys, zero domain verification needed. Sends directly from your Google account.
+ */
+function switchToGmailProvider() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_CONFIG);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert("Config sheet not found. Please run Setup first.");
+    return;
+  }
+  
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var key = String(data[i][0]).trim();
+    if (key === "Email Provider") {
+      sheet.getRange(i + 1, 2).setValue("Gmail (Default)");
+    } else if (key === "Email API Key") {
+      sheet.getRange(i + 1, 2).setValue("");
+    }
+  }
+  
+  clearSystemCache();
+  var quotaRemaining = MailApp.getRemainingDailyQuota();
+  SpreadsheetApp.getUi().alert(
+    "✅ Configured for Native Gmail",
+    "Email Provider is now set to: 'Gmail (Default)'\n\n" +
+    "• Sender: Your active Google Account (@gmail.com)\n" +
+    "• Recipients: Any member @gmail.com address\n" +
+    "• Setup required: NONE (Zero API keys, zero domain verification)\n" +
+    "• Remaining Gmail quota for today: " + quotaRemaining + " emails\n\n" +
+    "Next Step:\n" +
+    "Click '🏢 Workstation Attendance' > '📧 Send QR Codes to Members' to dispatch passes immediately!",
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
 }
 
 // ----------------------------------------------------------------------------
