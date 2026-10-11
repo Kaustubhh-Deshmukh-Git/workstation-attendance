@@ -597,6 +597,24 @@ function sendQrCodesToMembers() {
     return;
   }
   
+  // Validation for Resend domain requirements
+  if (isResend) {
+    var lowerSender = senderEmail.toLowerCase();
+    if (lowerSender.indexOf("@gmail.com") !== -1 || lowerSender.indexOf("@yahoo.com") !== -1 || lowerSender.indexOf("@outlook.com") !== -1 || lowerSender.indexOf("@hotmail.com") !== -1) {
+      SpreadsheetApp.getUi().alert(
+        "⚠️ Resend Cannot Send From @gmail.com",
+        "Resend Error: The domain '" + senderEmail.split("@")[1] + "' cannot be verified on Resend.\nResend only sends from custom verified domains (e.g. attendance@yourdomain.com).\n\n" +
+        "👉 Quick Fix (Easiest):\n" +
+        "1. Open menu: '🏢 Workstation Attendance' > '⚡ Email Provider Setup'\n" +
+        "2. Switch Provider to 'Gmail (Default)' and click 'Save Settings'\n" +
+        "3. Re-run 'Send QR Codes to Members' — it sends directly through your Gmail account with 0 setup!\n\n" +
+        "💡 Alternatively: Use 'Brevo' (Sendinblue), which supports free @gmail.com senders.",
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+      return;
+    }
+  }
+  
   // Validation for Gmail quota
   if (!isBrevo && !isResend) {
     var quotaRemaining = MailApp.getRemainingDailyQuota();
@@ -788,6 +806,9 @@ function sendViaResendApi(apiKey, senderEmail, senderName, toEmail, subject, htm
   var code = response.getResponseCode();
   if (code < 200 || code >= 300) {
     var err = response.getContentText();
+    if (code === 403 && err.indexOf("domain is not verified") !== -1) {
+      throw new Error("Resend Error (403): Cannot send from '" + senderEmail + "'. Public domains (@gmail.com) cannot be verified on Resend. Please switch Email Provider to 'Gmail (Default)' or 'Brevo' in menu '⚡ Email Provider Setup'.");
+    }
     throw new Error("Resend Error (" + code + "): " + err);
   }
   return JSON.parse(response.getContentText());
@@ -992,8 +1013,8 @@ function showEmailConfigDialog() {
     '    function toggleApiHelp() {' +
     '      var p = document.getElementById("prov").value;' +
     '      var h = document.getElementById("apiHelp");' +
-    '      if (p === "Brevo") { h.href = "https://app.brevo.com/settings/keys/api"; h.innerText = "👉 Get Free Brevo API Key (Instant)"; h.style.display="inline-block"; }' +
-    '      else if (p === "Resend") { h.href = "https://resend.com/api-keys"; h.innerText = "👉 Get Free Resend API Key (Instant)"; h.style.display="inline-block"; }' +
+    '      if (p === "Brevo") { h.href = "https://app.brevo.com/settings/keys/api"; h.innerText = "👉 Get Free Brevo API Key (Instant) • Supports free @gmail.com"; h.style.display="inline-block"; }' +
+    '      else if (p === "Resend") { h.href = "https://resend.com/domains"; h.innerText = "⚠️ Resend requires a custom domain (e.g. you@yourdomain.com). For @gmail.com, use Gmail (Default) or Brevo."; h.style.display="inline-block"; }' +
     '      else { h.style.display="none"; }' +
     '    }' +
     '    toggleApiHelp();' +
