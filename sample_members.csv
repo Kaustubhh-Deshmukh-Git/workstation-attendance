@@ -1,11 +1,11 @@
-Member ID,Name,Email,Token,QR Link,Email Sent
-WS-001,Aarav Sharma,aarav.sharma@example.com,,,No
-WS-002,Priya Patel,priya.patel@example.com,,,No
-WS-003,Rahul Verma,rahul.verma@example.com,,,No
-WS-004,Ananya Iyer,ananya.iyer@example.com,,,No
-WS-005,Vikram Singh,vikram.singh@example.com,,,No
-WS-006,Sneha Kulkarni,sneha.kulkarni@example.com,,,No
-WS-007,Rohan Mehta,rohan.mehta@example.com,,,No
-WS-008,Neha Gupta,neha.gupta@example.com,,,No
-WS-009,Karthik Raja,karthik.raja@example.com,,,No
-WS-010,Pooja Deshmukh,pooja.deshmukh@example.com,,,No
+Member ID,Name,Email,College,Department,Position in Workstation,Token,QR Link,Email Sent
+WS-001,Aarav Sharma,aarav.sharma@example.com,College of Engineering Pune,Computer Engineering,Lab Lead,,,No
+WS-002,Priya Patel,priya.patel@example.com,IIT Bombay,Data Science & AI,Research Fellow,,,No
+WS-003,Rahul Verma,rahul.verma@example.com,VJTI Mumbai,Electronics & Telecom,Hardware Specialist,,,No
+WS-004,Ananya Iyer,ananya.iyer@example.com,BITS Pilani,Information Technology,Software Intern,,,No
+WS-005,Vikram Singh,vikram.singh@example.com,NIT Trichy,Robotics & Automation,Project Associate,,,No
+WS-006,Sneha Kulkarni,sneha.kulkarni@example.com,MIT World Peace Univ,Mechanical & Mechatronics,Lab Assistant,,,No
+WS-007,Rohan Mehta,rohan.mehta@example.com,IIIT Hyderabad,Cyber Security,Network Admin,,,No
+WS-008,Neha Gupta,neha.gupta@example.com,Delhi Technological Univ,Electrical & Electronics,Research Intern,,,No
+WS-009,Karthik Raja,karthik.raja@example.com,Anna University,Artificial Intelligence,ML Specialist,,,No
+WS-010,Pooja Deshmukh,pooja.deshmukh@example.com,Walchand College of Eng,Civil & Infrastructure,BIM Coordinator,,,No

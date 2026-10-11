@@ -4,11 +4,15 @@
  * ============================================================================
  * Features:
  *  - Permanent, cryptographically signed (HMAC-SHA256) QR Code generation
+ *  - Member Profile & Constraints: College, Department, Position in Workstation
+ *  - Automated sheet structure migration & repair (fixes misplaced QR/Token data)
  *  - Automated QR badge email delivery with inline images & attachments
  *  - Real-time scanner backend with race-condition prevention (LockService)
  *  - Time-window validation & duplicate check-in prevention
  *  - Automated & manual daily report generation with rich KPI summaries
  *  - Scheduled time-driven report email triggers
+ *  - Multi-provider email dispatch (Gmail default, Brevo API, Resend API)
+ *  - Google Drive batch export of all member QR ID badges
  * ============================================================================
  */
 
@@ -29,6 +33,8 @@ function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu("🏢 Workstation Attendance")
     .addItem("🚀 Initialize / Refresh System Setup", "setup")
+    .addItem("🧹 Clear Sample Data (Start Fresh for Real Members)", "clearSampleDataForProduction")
+    .addItem("🛠️ Repair & Clean Sheet Columns", "repairSheetStructureMenu")
     .addItem("✨ Populate Sample Demo Data", "populateDemoData")
     .addItem("🔄 Clear System Cache / Refresh Settings", "clearSystemCache")
     .addSeparator()
@@ -45,11 +51,12 @@ function onOpen() {
 }
 
 // ----------------------------------------------------------------------------
-// 1. SYSTEM INITIALIZATION (setup)
+// 1. SYSTEM INITIALIZATION & DATA REPAIR (setup)
 // ----------------------------------------------------------------------------
 
 /**
  * Initializes sheets, sample members, formatting, and secure HMAC keys.
+ * Automatically repairs and migrates Member columns (College, Department, Position).
  */
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -105,57 +112,344 @@ function setup() {
     }
   }
 
-  // 3. Setup Members Sheet
+  // 3. Setup and Auto-Repair Members Sheet
   var membersSheet = getOrCreateSheet(ss, SHEET_MEMBERS);
   if (membersSheet.getLastRow() === 0) {
-    var memberHeaders = [["Member ID", "Name", "Email", "Token", "QR Link", "Email Sent"]];
-    membersSheet.getRange(1, 1, 1, 6).setValues(memberHeaders);
-    formatHeaderRow(membersSheet, 1, 6, "#0F9D58");
+    var memberHeaders = [["Member ID", "Name", "Email", "College", "Department", "Position in Workstation", "Token", "QR Link", "Email Sent"]];
+    membersSheet.getRange(1, 1, 1, 9).setValues(memberHeaders);
+    formatHeaderRow(membersSheet, 1, 9, "#0F9D58");
 
-    // Sample Members for instant testing
+    // Sample Members with complete workstation & academic constraints
     var sampleMembers = [
-      ["WS-001", "Aarav Sharma", "aarav.sharma@example.com", "", "", "No"],
-      ["WS-002", "Priya Patel", "priya.patel@example.com", "", "", "No"],
-      ["WS-003", "Rahul Verma", "rahul.verma@example.com", "", "", "No"],
-      ["WS-004", "Ananya Iyer", "ananya.iyer@example.com", "", "", "No"],
-      ["WS-005", "Vikram Singh", "vikram.singh@example.com", "", "", "No"]
+      ["WS-001", "Aarav Sharma", "aarav.sharma@example.com", "College of Engineering Pune", "Computer Engineering", "Lab Lead", "", "", "No"],
+      ["WS-002", "Priya Patel", "priya.patel@example.com", "IIT Bombay", "Data Science & AI", "Research Fellow", "", "", "No"],
+      ["WS-003", "Rahul Verma", "rahul.verma@example.com", "VJTI Mumbai", "Electronics & Telecom", "Hardware Specialist", "", "", "No"],
+      ["WS-004", "Ananya Iyer", "ananya.iyer@example.com", "BITS Pilani", "Information Technology", "Software Intern", "", "", "No"],
+      ["WS-005", "Vikram Singh", "vikram.singh@example.com", "NIT Trichy", "Robotics & Automation", "Project Associate", "", "", "No"]
     ];
-    membersSheet.getRange(2, 1, sampleMembers.length, 6).setValues(sampleMembers);
+    membersSheet.getRange(2, 1, sampleMembers.length, 9).setValues(sampleMembers);
+  } else {
+    // Automatically migrate legacy 6-column sheets and clean up misplaced QR URLs
+    migrateAndRepairMembersSheet(membersSheet);
   }
 
   // Generate tokens & QR links for any member lacking them
   generateMissingTokensAndQrs(membersSheet);
   
   // Format Members Sheet Columns
-  membersSheet.setColumnWidth(1, 120);
-  membersSheet.setColumnWidth(2, 160);
-  membersSheet.setColumnWidth(3, 220);
-  membersSheet.setColumnWidth(4, 260);
-  membersSheet.setColumnWidth(5, 300);
-  membersSheet.setColumnWidth(6, 110);
+  membersSheet.setColumnWidth(1, 110); // Member ID
+  membersSheet.setColumnWidth(2, 160); // Name
+  membersSheet.setColumnWidth(3, 210); // Email
+  membersSheet.setColumnWidth(4, 200); // College
+  membersSheet.setColumnWidth(5, 180); // Department
+  membersSheet.setColumnWidth(6, 180); // Position in Workstation
+  membersSheet.setColumnWidth(7, 240); // Token
+  membersSheet.setColumnWidth(8, 280); // QR Link
+  membersSheet.setColumnWidth(9, 100); // Email Sent
   membersSheet.setFrozenRows(1);
 
-  // 4. Setup Attendance Log Sheet
+  // 4. Setup and Auto-Repair Attendance Log Sheet
   var logSheet = getOrCreateSheet(ss, SHEET_ATTENDANCE);
-  if (logSheet.getLastRow() === 0) {
-    var logHeaders = [["Timestamp", "Date", "Member ID", "Name", "Status", "Scanner / Device Info"]];
-    logSheet.getRange(1, 1, 1, 6).setValues(logHeaders);
-    formatHeaderRow(logSheet, 1, 6, "#673AB7");
-    logSheet.setColumnWidth(1, 180);
-    logSheet.setColumnWidth(2, 120);
-    logSheet.setColumnWidth(3, 120);
-    logSheet.setColumnWidth(4, 180);
-    logSheet.setColumnWidth(5, 100);
-    logSheet.setColumnWidth(6, 220);
-    logSheet.setFrozenRows(1);
-  }
+  migrateAndRepairAttendanceSheet(logSheet);
 
-  SpreadsheetApp.getActiveSpreadsheet().toast("System setup initialized successfully!", "✅ Setup Complete", 5);
+  clearSystemCache();
+  SpreadsheetApp.getActiveSpreadsheet().toast("System setup initialized & column structure verified!", "✅ Setup Complete", 5);
+}
+
+/**
+ * Menu action to repair and clean up sheet columns on demand.
+ */
+function repairSheetStructureMenu() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var membersSheet = ss.getSheetByName(SHEET_MEMBERS);
+  var logSheet = ss.getSheetByName(SHEET_ATTENDANCE);
+  
+  if (membersSheet) {
+    migrateAndRepairMembersSheet(membersSheet);
+    generateMissingTokensAndQrs(membersSheet);
+  }
+  if (logSheet) {
+    migrateAndRepairAttendanceSheet(logSheet);
+  }
+  
+  clearSystemCache();
+  SpreadsheetApp.getUi().alert(
+    "🛠️ Sheet Structure Repaired",
+    "Columns in 'Members' and 'Attendance_Log' have been verified and cleaned up.\n\n" +
+    "• Column D: College\n" +
+    "• Column E: Department (Misplaced QR code URLs removed)\n" +
+    "• Column F: Position in Workstation\n" +
+    "• Column G: Token (HMAC-SHA256)\n" +
+    "• Column H: QR Link\n" +
+    "• Column I: Email Sent\n\n" +
+    "All QR Links and cryptographic Tokens are now stored in their dedicated columns.",
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+/**
+ * Clears sample/demo rows from Members and Attendance_Log so the user can start fresh with real members.
+ */
+function clearSampleDataForProduction() {
+  var ui = SpreadsheetApp.getUi();
+  var resp = ui.alert(
+    "🧹 Prepare for Real Data",
+    "This will clear sample/demo records from 'Members' and 'Attendance_Log' sheets.\n(Headers and formatting will be kept intact).\n\n" +
+    "Are you ready to clear sample data and start fresh with your real members?",
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (resp !== ui.Button.YES) return;
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var membersSheet = ss.getSheetByName(SHEET_MEMBERS);
+  var logSheet = ss.getSheetByName(SHEET_ATTENDANCE);
+  
+  if (membersSheet && membersSheet.getLastRow() > 1) {
+    membersSheet.getRange(2, 1, membersSheet.getLastRow() - 1, Math.max(membersSheet.getLastColumn(), 9)).clearContent();
+  }
+  
+  if (logSheet && logSheet.getLastRow() > 1) {
+    logSheet.getRange(2, 1, logSheet.getLastRow() - 1, Math.max(logSheet.getLastColumn(), 9)).clearContent();
+  }
+  
+  clearSystemCache();
+  ui.alert(
+    "✅ Sheets Ready for Real Data",
+    "Sample data has been removed.\n\n" +
+    "Next Steps:\n" +
+    "1. Paste or type your real members into 'Members' (Columns A to F):\n" +
+    "   - Col A: Member ID (e.g. WS-001)\n" +
+    "   - Col B: Full Name\n" +
+    "   - Col C: Email Address\n" +
+    "   - Col D: College / Institute\n" +
+    "   - Col E: Department / Branch\n" +
+    "   - Col F: Position in Workstation (e.g. Lab Lead, Intern)\n\n" +
+    "2. Leave Token (Col G) & QR Link (Col H) blank; set Email Sent (Col I) to 'No'.\n\n" +
+    "3. Click '🏢 Workstation Attendance' > '🚀 Initialize / Refresh System Setup' to compute tokens & QR codes!\n\n" +
+    "4. Click '📧 Send QR Codes to Members' or '📁 Export All QR Badges to Google Drive'.",
+    ui.ButtonSet.OK
+  );
+}
+
+/**
+ * Automatically repairs and migrates Members sheet:
+ * 1. Upgrades 6-column structure to 9-column structure without corrupting data.
+ * 2. Cleans up misplaced QR Code URLs or HMAC tokens that ended up in College/Department/Position columns.
+ * 3. Restores proper headers and column positions.
+ */
+function migrateAndRepairMembersSheet(membersSheet) {
+  if (!membersSheet) return;
+  var lastRow = membersSheet.getLastRow();
+  if (lastRow < 1) return;
+  
+  var memberHeaders = [["Member ID", "Name", "Email", "College", "Department", "Position in Workstation", "Token", "QR Link", "Email Sent"]];
+  var lastCol = Math.max(membersSheet.getLastColumn(), 9);
+  var currentHeaders = membersSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  
+  var numNonEmptyHeaders = currentHeaders.filter(function(h) { return String(h).trim().length > 0; }).length;
+  
+  // Case A: Old 6-column format [ID, Name, Email, Token, QR Link, Email Sent]
+  if (numNonEmptyHeaders <= 6 && String(currentHeaders[3] || "").toLowerCase().indexOf("token") !== -1) {
+    if (lastRow >= 2) {
+      var oldData = membersSheet.getRange(2, 1, lastRow - 1, 6).getValues();
+      var newData = [];
+      for (var r = 0; r < oldData.length; r++) {
+        var row = oldData[r];
+        var id = row[0];
+        var name = row[1];
+        var email = row[2];
+        var token = row[3];
+        var qrLink = row[4];
+        var emailSent = row[5];
+        
+        newData.push([id, name, email, "", "", "", token, qrLink, emailSent]);
+      }
+      membersSheet.getRange(1, 1, 1, 9).setValues(memberHeaders);
+      membersSheet.getRange(2, 1, newData.length, 9).setValues(newData);
+    } else {
+      membersSheet.getRange(1, 1, 1, 9).setValues(memberHeaders);
+    }
+  } else {
+    // Ensure header row is set to 9 columns
+    membersSheet.getRange(1, 1, 1, 9).setValues(memberHeaders);
+    
+    // Case B: Sheet where row 1 is 9 columns, but data rows 2..N contain misplaced QR URLs or tokens
+    if (lastRow >= 2) {
+      var data = membersSheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      var modified = false;
+      
+      for (var i = 0; i < data.length; i++) {
+        var colVal = String(data[i][3] || "").trim(); // Column D (College)
+        var deptVal = String(data[i][4] || "").trim(); // Column E (Department)
+        var posVal = String(data[i][5] || "").trim(); // Column F (Position in Workstation)
+        var tokenVal = String(data[i][6] || "").trim(); // Column G (Token)
+        var qrVal = String(data[i][7] || "").trim(); // Column H (QR Link)
+        var sentVal = String(data[i][8] || "").trim(); // Column I (Email Sent)
+        
+        // Check if Department (Col E) contains a QR Code URL (e.g. api.qrserver.com or http...)
+        if (deptVal.indexOf("http") === 0 || deptVal.indexOf("api.qrserver.com") !== -1 || deptVal.indexOf("create-qr-code") !== -1) {
+          if (!qrVal || qrVal.indexOf("http") === -1) {
+            data[i][7] = deptVal; // Move QR link to Column H (QR Link)
+          }
+          data[i][4] = ""; // Clear Department field
+          modified = true;
+        }
+        
+        // Check if College (Col D) contains a 64-char hex HMAC token
+        if (/^[a-f0-9]{64}$/i.test(colVal)) {
+          if (!tokenVal) {
+            data[i][6] = colVal; // Move token to Column G (Token)
+          }
+          data[i][3] = ""; // Clear College field
+          modified = true;
+        }
+        
+        // Check if Position (Col F) contains "Yes" or "No" (old Email Sent value)
+        if (posVal.toLowerCase() === "yes" || posVal.toLowerCase() === "no") {
+          if (!sentVal) {
+            data[i][8] = posVal; // Move to Column I (Email Sent)
+          }
+          data[i][5] = ""; // Clear Position field
+          modified = true;
+        }
+      }
+      
+      if (modified) {
+        membersSheet.getRange(2, 1, data.length, 9).setValues(data);
+      }
+    }
+  }
+  
+  formatHeaderRow(membersSheet, 1, 9, "#0F9D58");
+  membersSheet.setColumnWidth(1, 110);
+  membersSheet.setColumnWidth(2, 160);
+  membersSheet.setColumnWidth(3, 210);
+  membersSheet.setColumnWidth(4, 200);
+  membersSheet.setColumnWidth(5, 180);
+  membersSheet.setColumnWidth(6, 180);
+  membersSheet.setColumnWidth(7, 240);
+  membersSheet.setColumnWidth(8, 280);
+  membersSheet.setColumnWidth(9, 100);
+  membersSheet.setFrozenRows(1);
+}
+
+/**
+ * Ensures Attendance_Log has the 9-column headers and formatting.
+ */
+function migrateAndRepairAttendanceSheet(logSheet) {
+  if (!logSheet) return;
+  var logHeaders = [["Timestamp", "Date", "Member ID", "Name", "College", "Department", "Position in Workstation", "Status", "Scanner / Device Info"]];
+  
+  if (logSheet.getLastRow() === 0) {
+    logSheet.getRange(1, 1, 1, 9).setValues(logHeaders);
+  } else {
+    var lastCol = Math.max(logSheet.getLastColumn(), 9);
+    var currHeaders = logSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    var numNonEmpty = currHeaders.filter(function(h) { return String(h).trim().length > 0; }).length;
+    
+    if (numNonEmpty <= 6 && currHeaders.length <= 6) {
+      if (logSheet.getLastRow() >= 2) {
+        var oldLogs = logSheet.getRange(2, 1, logSheet.getLastRow() - 1, 6).getValues();
+        var newLogs = [];
+        for (var r = 0; r < oldLogs.length; r++) {
+          var row = oldLogs[r];
+          newLogs.push([row[0], row[1], row[2], row[3], "", "", "", row[4], row[5]]);
+        }
+        logSheet.getRange(1, 1, 1, 9).setValues(logHeaders);
+        logSheet.getRange(2, 1, newLogs.length, 9).setValues(newLogs);
+      } else {
+        logSheet.getRange(1, 1, 1, 9).setValues(logHeaders);
+      }
+    } else {
+      logSheet.getRange(1, 1, 1, 9).setValues(logHeaders);
+    }
+  }
+  
+  formatHeaderRow(logSheet, 1, 9, "#673AB7");
+  logSheet.setColumnWidth(1, 170);
+  logSheet.setColumnWidth(2, 110);
+  logSheet.setColumnWidth(3, 110);
+  logSheet.setColumnWidth(4, 160);
+  logSheet.setColumnWidth(5, 190);
+  logSheet.setColumnWidth(6, 170);
+  logSheet.setColumnWidth(7, 170);
+  logSheet.setColumnWidth(8, 100);
+  logSheet.setColumnWidth(9, 200);
+  logSheet.setFrozenRows(1);
 }
 
 // ----------------------------------------------------------------------------
 // 2. CRYPTOGRAPHIC TOKEN & QR CODE LOGIC
 // ----------------------------------------------------------------------------
+
+/**
+ * Dynamically resolves column indices in Members sheet based on header names.
+ * Ensures robust compatibility with custom or standard column orders.
+ * @param {Sheet} sheet - Members Sheet
+ * @return {object} Column index map (0-based)
+ */
+function getMemberColumnIndices(sheet) {
+  var numCols = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
+  
+  var idx = {
+    id: -1,
+    name: -1,
+    email: -1,
+    college: -1,
+    dept: -1,
+    pos: -1,
+    token: -1,
+    qr: -1,
+    emailSent: -1,
+    totalCols: headers.length
+  };
+  
+  for (var c = 0; c < headers.length; c++) {
+    var h = String(headers[c] || "").trim().toLowerCase();
+    if (!h) continue;
+    if (h === "member id" || h === "id" || (h.indexOf("id") !== -1 && h.indexOf("member") !== -1)) {
+      idx.id = c;
+    } else if (h === "name" || h === "member name" || h === "full name") {
+      idx.name = c;
+    } else if (h === "email" || h === "email address") {
+      idx.email = c;
+    } else if (h.indexOf("college") !== -1 || h.indexOf("institute") !== -1 || h.indexOf("university") !== -1) {
+      idx.college = c;
+    } else if (h.indexOf("department") !== -1 || h.indexOf("dept") !== -1 || h.indexOf("branch") !== -1) {
+      idx.dept = c;
+    } else if (h.indexOf("position") !== -1 || h.indexOf("role") !== -1 || h.indexOf("designation") !== -1) {
+      idx.pos = c;
+    } else if (h === "token" || h === "hmac token" || (h.indexOf("token") !== -1 && h.indexOf("qr") === -1)) {
+      idx.token = c;
+    } else if (h.indexOf("qr") !== -1 || h.indexOf("qr link") !== -1 || h.indexOf("qr code") !== -1 || h.indexOf("qr url") !== -1) {
+      idx.qr = c;
+    } else if (h.indexOf("email sent") !== -1 || h === "sent" || h === "email status") {
+      idx.emailSent = c;
+    }
+  }
+
+  // Fallbacks based on standard column layout
+  if (idx.id === -1) idx.id = 0;
+  if (idx.name === -1) idx.name = 1;
+  if (idx.email === -1) idx.email = 2;
+  
+  if (headers.length >= 9) {
+    if (idx.college === -1) idx.college = 3;
+    if (idx.dept === -1) idx.dept = 4;
+    if (idx.pos === -1) idx.pos = 5;
+    if (idx.token === -1) idx.token = 6;
+    if (idx.qr === -1) idx.qr = 7;
+    if (idx.emailSent === -1) idx.emailSent = 8;
+  } else if (headers.length <= 6) {
+    if (idx.token === -1) idx.token = 3;
+    if (idx.qr === -1) idx.qr = 4;
+    if (idx.emailSent === -1) idx.emailSent = 5;
+  }
+  
+  return idx;
+}
 
 /**
  * Retrieves the permanent secret key from Script Properties or generates a new one.
@@ -217,35 +511,40 @@ function generateQrCodeUrl(memberId, token) {
 }
 
 /**
- * Scans Members sheet and fills missing Tokens and QR URLs.
+ * Scans Members sheet and fills missing Tokens and QR URLs in their dedicated columns.
  */
 function generateMissingTokensAndQrs(sheet) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
   
-  var data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  var colIdx = getMemberColumnIndices(sheet);
+  if (colIdx.token < 0) colIdx.token = 6;
+  if (colIdx.qr < 0) colIdx.qr = 7;
+  
+  var numCols = Math.max(colIdx.totalCols, colIdx.token + 1, colIdx.qr + 1, 9);
+  var data = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
   var updated = false;
   
   for (var i = 0; i < data.length; i++) {
-    var memberId = data[i][0];
-    var token = data[i][3];
-    var qrLink = data[i][4];
+    var memberId = data[i][colIdx.id];
+    var token = data[i][colIdx.token];
+    var qrLink = data[i][colIdx.qr];
     
     if (memberId) {
       if (!token) {
         token = generateMemberToken(memberId);
-        data[i][3] = token;
+        data[i][colIdx.token] = token;
         updated = true;
       }
-      if (!qrLink || qrLink.indexOf("api.qrserver.com") === -1) {
-        data[i][4] = generateQrCodeUrl(memberId, token);
+      if (!qrLink || String(qrLink).indexOf("api.qrserver.com") === -1) {
+        data[i][colIdx.qr] = generateQrCodeUrl(memberId, token);
         updated = true;
       }
     }
   }
   
   if (updated) {
-    sheet.getRange(2, 1, data.length, 6).setValues(data);
+    sheet.getRange(2, 1, data.length, numCols).setValues(data);
   }
 }
 
@@ -255,6 +554,7 @@ function generateMissingTokensAndQrs(sheet) {
 
 /**
  * Sends permanent QR ID badges to all members where Email Sent is not "Yes".
+ * Includes member details (College, Department, Position in Workstation).
  * Supports Gmail (default 100/day limit), Brevo API (300/day free), and Resend API (3,000/mo free).
  */
 function sendQrCodesToMembers() {
@@ -265,6 +565,7 @@ function sendQrCodesToMembers() {
     return;
   }
   
+  migrateAndRepairMembersSheet(sheet);
   generateMissingTokensAndQrs(sheet);
   
   var lastRow = sheet.getLastRow();
@@ -312,7 +613,9 @@ function sendQrCodesToMembers() {
     }
   }
   
-  var data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  var colIdx = getMemberColumnIndices(sheet);
+  var numCols = Math.max(colIdx.totalCols, 9);
+  var data = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
   var sentCount = 0;
   var skipCount = 0;
   var errorCount = 0;
@@ -320,19 +623,27 @@ function sendQrCodesToMembers() {
   var providerLabel = isBrevo ? "Brevo API" : (isResend ? "Resend API" : "Gmail");
   
   for (var i = 0; i < data.length; i++) {
-    var memberId = data[i][0];
-    var name = data[i][1];
-    var email = data[i][2];
-    var token = data[i][3];
-    var qrUrl = data[i][4];
-    var emailSent = String(data[i][5]).trim().toLowerCase();
+    var memberId = data[i][colIdx.id];
+    var name = data[i][colIdx.name];
+    var email = data[i][colIdx.email];
+    var college = colIdx.college >= 0 ? data[i][colIdx.college] : "";
+    var department = colIdx.dept >= 0 ? data[i][colIdx.dept] : "";
+    var position = colIdx.pos >= 0 ? data[i][colIdx.pos] : "";
+    var token = data[i][colIdx.token];
+    var qrUrl = data[i][colIdx.qr];
+    var emailSent = String(data[i][colIdx.emailSent] || "").trim().toLowerCase();
+    
+    // Safety check: ignore any URL inside department string
+    if (department && (department.indexOf("http") === 0 || department.indexOf("api.qrserver.com") !== -1)) {
+      department = "";
+    }
     
     if (emailSent === "yes") {
       skipCount++;
       continue;
     }
     
-    if (!email || email.indexOf("@") === -1) {
+    if (!email || String(email).indexOf("@") === -1) {
       errorCount++;
       errors.push("Row " + (i + 2) + " (" + name + "): Invalid email address");
       continue;
@@ -349,15 +660,15 @@ function sendQrCodesToMembers() {
       
       if (isBrevo) {
         // Send via Brevo HTTP API
-        var htmlBody = buildQrEmailHtml(name, memberId, workstationName, false, qrUrl);
+        var htmlBody = buildQrEmailHtml(name, memberId, workstationName, false, qrUrl, college, department, position);
         sendViaBrevoApi(apiKey, senderEmail, senderName, email, name, subject, htmlBody, qrBlob, memberId);
       } else if (isResend) {
         // Send via Resend HTTP API
-        var htmlBody = buildQrEmailHtml(name, memberId, workstationName, false, qrUrl);
+        var htmlBody = buildQrEmailHtml(name, memberId, workstationName, false, qrUrl, college, department, position);
         sendViaResendApi(apiKey, senderEmail, senderName, email, subject, htmlBody, qrBlob, memberId);
       } else {
         // Send via Google Gmail App
-        var htmlBody = buildQrEmailHtml(name, memberId, workstationName, true, qrUrl);
+        var htmlBody = buildQrEmailHtml(name, memberId, workstationName, true, qrUrl, college, department, position);
         MailApp.sendEmail({
           to: email,
           subject: subject,
@@ -370,7 +681,7 @@ function sendQrCodesToMembers() {
       }
       
       // Update Email Sent status
-      data[i][5] = "Yes";
+      data[i][colIdx.emailSent] = "Yes";
       sentCount++;
       
     } catch (e) {
@@ -380,7 +691,7 @@ function sendQrCodesToMembers() {
   }
   
   // Persist updated "Email Sent" status back to sheet
-  sheet.getRange(2, 1, data.length, 6).setValues(data);
+  sheet.getRange(2, 1, data.length, numCols).setValues(data);
   
   var msg = "Provider: " + providerLabel + "\n\n" +
             "• Sent successfully: " + sentCount + "\n" +
@@ -396,7 +707,6 @@ function sendQrCodesToMembers() {
 
 /**
  * Dispatches an email via Brevo's REST API (v3).
- * Brevo Free tier allows 300 emails/day with no credit card required.
  */
 function sendViaBrevoApi(apiKey, senderEmail, senderName, toEmail, toName, subject, htmlContent, qrBlob, memberId) {
   var url = "https://api.brevo.com/v3/smtp/email";
@@ -445,7 +755,6 @@ function sendViaBrevoApi(apiKey, senderEmail, senderName, toEmail, toName, subje
 
 /**
  * Dispatches an email via Resend's REST API.
- * Resend Free tier provides 3,000 emails/month free.
  */
 function sendViaResendApi(apiKey, senderEmail, senderName, toEmail, subject, htmlContent, qrBlob, memberId) {
   var url = "https://api.resend.com/emails";
@@ -485,11 +794,18 @@ function sendViaResendApi(apiKey, senderEmail, senderName, toEmail, subject, htm
 }
 
 /**
- * Builds a styled HTML email template for the QR badge.
+ * Builds a styled HTML email template for the QR badge with Member details (College, Department, Position).
  */
-function buildQrEmailHtml(name, memberId, workstationName, isInlineCid, qrImageUrl) {
+function buildQrEmailHtml(name, memberId, workstationName, isInlineCid, qrImageUrl, college, department, position) {
   var imageSrc = isInlineCid ? "cid:qrImage" : escapeHtml(qrImageUrl);
   
+  var positionHtml = position ? '<div style="display:inline-block; background-color:#EFF6FF; color:#1D4ED8; font-size:12px; font-weight:700; padding:3px 12px; border-radius:12px; margin-top:8px; border:1px solid #BFDBFE; text-transform:uppercase; letter-spacing:0.5px;">💼 ' + escapeHtml(position) + '</div>' : '';
+  
+  var academicDetails = [];
+  if (department && department.indexOf("http") === -1) academicDetails.push('🔬 ' + escapeHtml(department));
+  if (college && !/^[a-f0-9]{64}$/i.test(college)) academicDetails.push('🏛️ ' + escapeHtml(college));
+  var academicHtml = academicDetails.length > 0 ? '<div style="font-size:12px; color:#475569; margin-top:6px; font-weight:500;">' + academicDetails.join(' &bull; ') + '</div>' : '';
+
   return '<!DOCTYPE html>' +
   '<html>' +
   '<head><meta charset="utf-8"></head>' +
@@ -510,13 +826,15 @@ function buildQrEmailHtml(name, memberId, workstationName, isInlineCid, qrImageU
   '            <td style="padding:28px 32px; text-align:center;">' +
   '              <p style="font-size:16px; margin:0 0 16px 0; color:#1F2937; text-align:left;">Hello <strong>' + escapeHtml(name) + '</strong>,</p>' +
   '              <p style="font-size:14px; line-height:1.6; margin:0 0 20px 0; color:#4B5563; text-align:left;">' +
-  '                Here is your official, permanent workstation QR code. This functions as your digital ID badge for automatic check-in at the entrance.' +
+  '                Here is your official, permanent workstation QR code badge for automatic check-in at the entrance.' +
   '              </p>' +
   '              <!-- QR Badge Card -->' +
-  '              <div style="background-color:#F8FAFC; border:2px dashed #CBD5E1; border-radius:10px; padding:20px; display:inline-block; margin:10px auto;">' +
-  '                <img src="' + imageSrc + '" width="220" height="220" alt="Workstation QR Code" style="display:block; margin:0 auto; border-radius:6px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,0.05);" />' +
-  '                <div style="margin-top:12px; font-size:15px; font-weight:700; color:#1E3A8A; letter-spacing:1px;">ID: ' + escapeHtml(memberId) + '</div>' +
-  '                <div style="font-size:12px; color:#64748B; margin-top:2px;">' + escapeHtml(name) + '</div>' +
+  '              <div style="background-color:#F8FAFC; border:2px dashed #CBD5E1; border-radius:12px; padding:22px 20px; display:inline-block; margin:10px auto; max-width:320px; box-sizing:border-box;">' +
+  '                <img src="' + imageSrc + '" width="220" height="220" alt="Workstation QR Code" style="display:block; margin:0 auto; border-radius:8px; background:#fff; padding:6px; box-shadow:0 2px 8px rgba(0,0,0,0.06);" />' +
+  '                <div style="margin-top:14px; font-size:16px; font-weight:800; color:#1E3A8A; letter-spacing:1px;">ID: ' + escapeHtml(memberId) + '</div>' +
+  '                <div style="font-size:14px; font-weight:600; color:#1E293B; margin-top:2px;">' + escapeHtml(name) + '</div>' +
+  '                ' + positionHtml +
+  '                ' + academicHtml +
   '              </div>' +
   '              <!-- Important Notice Box -->' +
   '              <div style="background-color:#FEF3C7; border-left:4px solid #F59E0B; padding:12px 16px; border-radius:4px; text-align:left; margin-top:22px;">' +
@@ -524,7 +842,7 @@ function buildQrEmailHtml(name, memberId, workstationName, isInlineCid, qrImageU
   '                <ul style="margin:0; padding-left:18px; color:#78350F; font-size:12px; line-height:1.5;">' +
   '                  <li><strong>Keep this QR safe:</strong> Save it on your phone or print it.</li>' +
   '                  <li><strong>Permanent ID:</strong> This QR code never expires and never changes.</li>' +
-  '                  <li><strong>Fast Check-in:</strong> Scan this code in front of the kiosk scanner upon entering.</li>' +
+  '                  <li><strong>Fast Check-in:</strong> Present this code in front of the kiosk scanner upon entering.</li>' +
   '                </ul>' +
   '              </div>' +
   '            </td>' +
@@ -555,6 +873,7 @@ function exportAllQrsToDrive() {
     return;
   }
   
+  migrateAndRepairMembersSheet(sheet);
   generateMissingTokensAndQrs(sheet);
   
   var lastRow = sheet.getLastRow();
@@ -569,16 +888,18 @@ function exportAllQrsToDrive() {
   var folderName = "QR_Badges_" + workstationName.replace(/[^a-zA-Z0-9_-]/g, "_") + "_" + timeStampStr;
   
   var folder = DriveApp.createFolder(folderName);
-  var data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  var colIdx = getMemberColumnIndices(sheet);
+  var numCols = Math.max(colIdx.totalCols, 9);
+  var data = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
   var count = 0;
   var errors = 0;
   
   SpreadsheetApp.getActiveSpreadsheet().toast("Generating and saving QR badges to Google Drive...", "⏳ Exporting QRs", 10);
   
   for (var i = 0; i < data.length; i++) {
-    var memberId = data[i][0];
-    var name = (data[i][1] || "Member").toString().replace(/[^a-zA-Z0-9_-]/g, "_");
-    var qrUrl = data[i][4];
+    var memberId = data[i][colIdx.id];
+    var name = (data[i][colIdx.name] || "Member").toString().replace(/[^a-zA-Z0-9_-]/g, "_");
+    var qrUrl = data[i][colIdx.qr];
     
     if (memberId && qrUrl) {
       try {
@@ -795,11 +1116,11 @@ function getWorkstationConfig() {
 }
 
 /**
- * Retrieves cached dictionary of { memberId: memberName } with 1-hour TTL.
+ * Retrieves cached dictionary of { memberId: { id, name, email, college, department, position } } with 1-hour TTL.
  */
 function getMemberMapCached(ss) {
   var cache = CacheService.getScriptCache();
-  var cached = cache.get("MEMBERS_MAP");
+  var cached = cache.get("MEMBERS_MAP_V3");
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -811,18 +1132,44 @@ function getMemberMapCached(ss) {
   var lastRow = membersSheet.getLastRow();
   if (lastRow < 2) return {};
   
-  var data = membersSheet.getRange(2, 1, lastRow - 1, 2).getValues(); // Only Col A & B
+  var colIdx = getMemberColumnIndices(membersSheet);
+  var numCols = Math.max(colIdx.totalCols, 9);
+  var data = membersSheet.getRange(2, 1, lastRow - 1, numCols).getValues();
   var map = {};
+  
   for (var i = 0; i < data.length; i++) {
-    var id = String(data[i][0]).trim().toUpperCase();
-    var name = String(data[i][1]).trim();
+    var id = String(data[i][colIdx.id] || "").trim().toUpperCase();
+    var name = String(data[i][colIdx.name] || "").trim();
+    var email = String(data[i][colIdx.email] || "").trim();
+    var college = colIdx.college >= 0 ? String(data[i][colIdx.college] || "").trim() : "";
+    var dept = colIdx.dept >= 0 ? String(data[i][colIdx.dept] || "").trim() : "";
+    var pos = colIdx.pos >= 0 ? String(data[i][colIdx.pos] || "").trim() : "";
+    
+    // Safety sanitation: Ensure URL or tokens never leak into department/college fields
+    if (dept.indexOf("http") === 0 || dept.indexOf("api.qrserver.com") !== -1) {
+      dept = "";
+    }
+    if (/^[a-f0-9]{64}$/i.test(college)) {
+      college = "";
+    }
+    if (pos.toLowerCase() === "yes" || pos.toLowerCase() === "no") {
+      pos = "";
+    }
+    
     if (id) {
-      map[id] = name;
+      map[id] = {
+        id: id,
+        name: name || id,
+        email: email,
+        college: college,
+        department: dept,
+        position: pos
+      };
     }
   }
   
   try {
-    cache.put("MEMBERS_MAP", JSON.stringify(map), 3600); // 1 hour
+    cache.put("MEMBERS_MAP_V3", JSON.stringify(map), 3600); // 1 hour
   } catch (e) {}
   
   return map;
@@ -830,6 +1177,7 @@ function getMemberMapCached(ss) {
 
 /**
  * High-Speed Attendance Marking with In-Memory Caching and Concurrency Locks.
+ * Records College, Department, Position in Workstation to Attendance Log.
  * @param {string} qrData - Scanned content ("MemberID|Token")
  * @param {string} deviceInfo - Optional scanner details
  * @return {object} JSON status object
@@ -897,12 +1245,18 @@ function markAttendance(qrData, deviceInfo) {
     var partsCache = cachedScan.split("|");
     var memberNameCached = partsCache[0] || memberId;
     var timeCached = partsCache[1] || "";
+    var collegeCached = partsCache[2] || "";
+    var deptCached = partsCache[3] || "";
+    var posCached = partsCache[4] || "";
     return {
       success: false,
       status: "ALREADY_MARKED",
       title: "Already Present",
       name: memberNameCached,
       memberId: memberId,
+      college: collegeCached,
+      department: deptCached,
+      position: posCached,
       time: timeCached,
       message: memberNameCached + ", you are already marked present today" + (timeCached ? " at " + timeCached : "") + "."
     };
@@ -923,15 +1277,15 @@ function markAttendance(qrData, deviceInfo) {
     
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var memberMap = getMemberMapCached(ss);
-    var memberName = memberMap[memberId];
+    var member = memberMap[memberId];
     
-    if (!memberName) {
-      cache.remove("MEMBERS_MAP");
+    if (!member) {
+      cache.remove("MEMBERS_MAP_V3");
       memberMap = getMemberMapCached(ss);
-      memberName = memberMap[memberId];
+      member = memberMap[memberId];
     }
     
-    if (!memberName) {
+    if (!member) {
       return {
         success: false,
         status: "NOT_FOUND",
@@ -940,17 +1294,22 @@ function markAttendance(qrData, deviceInfo) {
       };
     }
     
+    var memberName = typeof member === "object" ? member.name : String(member);
+    var memberCollege = typeof member === "object" ? (member.college || "") : "";
+    var memberDept = typeof member === "object" ? (member.department || "") : "";
+    var memberPos = typeof member === "object" ? (member.position || "") : "";
+    
     var logSheet = ss.getSheetByName(SHEET_ATTENDANCE);
     if (!logSheet) {
       logSheet = getOrCreateSheet(ss, SHEET_ATTENDANCE);
     }
     
     var deviceString = deviceInfo || "Web App Kiosk";
-    logSheet.appendRow([now, todayDateStr, memberId, memberName, "Present", deviceString]);
+    logSheet.appendRow([now, todayDateStr, memberId, memberName, memberCollege, memberDept, memberPos, "Present", deviceString]);
     
     // Store in cache for 24 hours so duplicate re-scans return in <10ms
     try {
-      cache.put(cacheKey, memberName + "|" + readableTimeStr, 86400);
+      cache.put(cacheKey, memberName + "|" + readableTimeStr + "|" + memberCollege + "|" + memberDept + "|" + memberPos, 86400);
     } catch (e) {}
     
     return {
@@ -959,6 +1318,9 @@ function markAttendance(qrData, deviceInfo) {
       title: "Check-in Successful",
       name: memberName,
       memberId: memberId,
+      college: memberCollege,
+      department: memberDept,
+      position: memberPos,
       time: readableTimeStr,
       message: "Welcome, " + memberName + "! Attendance marked at " + readableTimeStr + "."
     };
@@ -1001,6 +1363,7 @@ function generateTodayReportMenu() {
 
 /**
  * Generates or updates the daily report sheet (Report_YYYY-MM-DD).
+ * Includes Member College, Department, Position in Workstation.
  * @param {string} [targetDateStr] - Format "yyyy-MM-dd". Defaults to today.
  * @return {object} Summary result
  */
@@ -1021,18 +1384,38 @@ function generateDailyReport(targetDateStr) {
   }
   
   // 1. Fetch all members
-  var membersData = membersSheet.getDataRange().getValues();
-  if (membersData.length < 2) {
+  var lastRow = membersSheet.getLastRow();
+  if (lastRow < 2) {
     return { success: false, message: "No members registered in system." };
   }
   
+  var colIdx = getMemberColumnIndices(membersSheet);
+  var numCols = Math.max(colIdx.totalCols, 9);
+  var membersData = membersSheet.getRange(2, 1, lastRow - 1, numCols).getValues();
+  
   var membersList = [];
-  for (var i = 1; i < membersData.length; i++) {
-    var id = String(membersData[i][0]).trim().toUpperCase();
-    var name = membersData[i][1];
-    var email = membersData[i][2];
+  for (var i = 0; i < membersData.length; i++) {
+    var id = String(membersData[i][colIdx.id] || "").trim().toUpperCase();
+    var name = membersData[i][colIdx.name] || "";
+    var email = membersData[i][colIdx.email] || "";
+    var college = colIdx.college >= 0 ? (membersData[i][colIdx.college] || "") : "";
+    var dept = colIdx.dept >= 0 ? (membersData[i][colIdx.dept] || "") : "";
+    var pos = colIdx.pos >= 0 ? (membersData[i][colIdx.pos] || "") : "";
+    
+    // Extra safety cleaning
+    if (dept && (dept.indexOf("http") === 0 || dept.indexOf("api.qrserver.com") !== -1)) dept = "";
+    if (college && /^[a-f0-9]{64}$/i.test(college)) college = "";
+    if (pos && (pos.toLowerCase() === "yes" || pos.toLowerCase() === "no")) pos = "";
+    
     if (id) {
-      membersList.push({ id: id, name: name, email: email });
+      membersList.push({
+        id: id,
+        name: name,
+        email: email,
+        college: college,
+        department: dept,
+        position: pos
+      });
     }
   }
   
@@ -1062,7 +1445,7 @@ function generateDailyReport(targetDateStr) {
     }
   }
   
-  // 3. Compute stats & rows
+  // 3. Compute stats & rows (8 columns in report)
   var totalMembers = membersList.length;
   var presentCount = 0;
   var reportRows = [];
@@ -1072,9 +1455,9 @@ function generateDailyReport(targetDateStr) {
     var isPresent = attendanceMap[m.id];
     if (isPresent) {
       presentCount++;
-      reportRows.push([m.id, m.name, m.email, "Present", isPresent.time]);
+      reportRows.push([m.id, m.name, m.email, m.college, m.department, m.position, "Present", isPresent.time]);
     } else {
-      reportRows.push([m.id, m.name, m.email, "Absent", "-"]);
+      reportRows.push([m.id, m.name, m.email, m.college, m.department, m.position, "Absent", "-"]);
     }
   }
   
@@ -1089,12 +1472,12 @@ function generateDailyReport(targetDateStr) {
     reportSheet = ss.insertSheet(reportSheetName);
   }
   
-  // 5. Design Premium KPI Summary Header
+  // 5. Design Premium KPI Summary Header (Spanning A:H)
   var config = getConfigMap();
   var workstationName = config["Workstation Name"] || "Workstation";
   
   // Title
-  reportSheet.getRange("A1:E1").merge()
+  reportSheet.getRange("A1:H1").merge()
     .setValue("🏢 " + workstationName.toUpperCase() + " — DAILY ATTENDANCE REPORT")
     .setFontWeight("bold")
     .setFontSize(14)
@@ -1105,7 +1488,7 @@ function generateDailyReport(targetDateStr) {
   reportSheet.setRowHeight(1, 36);
   
   // Date subtitle
-  reportSheet.getRange("A2:E2").merge()
+  reportSheet.getRange("A2:H2").merge()
     .setValue("Report Date: " + targetDateStr + " | Generated At: " + Utilities.formatDate(today, SCRIPT_TIMEZONE, "yyyy-MM-dd hh:mm:ss a"))
     .setFontSize(10)
     .setFontColor("#4B5563")
@@ -1114,50 +1497,53 @@ function generateDailyReport(targetDateStr) {
   reportSheet.setRowHeight(2, 24);
   
   // KPI Cards Row
-  reportSheet.getRange("A3").setValue("Total Members: " + totalMembers).setBackground("#E0E7FF").setFontColor("#3730A3").setFontWeight("bold").setHorizontalAlignment("center");
-  reportSheet.getRange("B3").setValue("Present: " + presentCount).setBackground("#DCFCE7").setFontColor("#166534").setFontWeight("bold").setHorizontalAlignment("center");
-  reportSheet.getRange("C3").setValue("Absent: " + absentCount).setBackground("#FEE2E2").setFontColor("#991B1B").setFontWeight("bold").setHorizontalAlignment("center");
-  reportSheet.getRange("D3:E3").merge().setValue("Attendance Rate: " + attendancePct + "%").setBackground("#FEF3C7").setFontColor("#92400E").setFontWeight("bold").setHorizontalAlignment("center");
+  reportSheet.getRange("A3:B3").merge().setValue("Total Members: " + totalMembers).setBackground("#E0E7FF").setFontColor("#3730A3").setFontWeight("bold").setHorizontalAlignment("center");
+  reportSheet.getRange("C3:D3").merge().setValue("Present: " + presentCount).setBackground("#DCFCE7").setFontColor("#166534").setFontWeight("bold").setHorizontalAlignment("center");
+  reportSheet.getRange("E3:F3").merge().setValue("Absent: " + absentCount).setBackground("#FEE2E2").setFontColor("#991B1B").setFontWeight("bold").setHorizontalAlignment("center");
+  reportSheet.getRange("G3:H3").merge().setValue("Attendance Rate: " + attendancePct + "%").setBackground("#FEF3C7").setFontColor("#92400E").setFontWeight("bold").setHorizontalAlignment("center");
   reportSheet.setRowHeight(3, 28);
   
   // Spacer row
   reportSheet.setRowHeight(4, 12);
   
-  // Table Header
-  var tableHeaders = [["Member ID", "Member Name", "Email Address", "Attendance Status", "Check-in Time"]];
-  reportSheet.getRange(5, 1, 1, 5).setValues(tableHeaders);
-  formatHeaderRow(reportSheet, 5, 5, "#334155");
+  // Table Header (8 columns)
+  var tableHeaders = [["Member ID", "Member Name", "Email Address", "College", "Department", "Position in Workstation", "Attendance Status", "Check-in Time"]];
+  reportSheet.getRange(5, 1, 1, 8).setValues(tableHeaders);
+  formatHeaderRow(reportSheet, 5, 8, "#334155");
   reportSheet.setRowHeight(5, 28);
   
   // Write Data Rows
   if (reportRows.length > 0) {
-    reportSheet.getRange(6, 1, reportRows.length, 5).setValues(reportRows);
+    reportSheet.getRange(6, 1, reportRows.length, 8).setValues(reportRows);
     
     // Conditional Row Styling
     for (var r = 0; r < reportRows.length; r++) {
       var rowNum = 6 + r;
-      var status = reportRows[r][3];
-      var range = reportSheet.getRange(rowNum, 1, 1, 5);
+      var status = reportRows[r][6];
+      var range = reportSheet.getRange(rowNum, 1, 1, 8);
       
       if (status === "Present") {
         range.setBackground("#F0FDF4");
-        reportSheet.getRange(rowNum, 4).setFontColor("#15803D").setFontWeight("bold");
+        reportSheet.getRange(rowNum, 7).setFontColor("#15803D").setFontWeight("bold");
       } else {
         range.setBackground("#FEF2F2");
-        reportSheet.getRange(rowNum, 4).setFontColor("#B91C1C").setFontWeight("bold");
-        reportSheet.getRange(rowNum, 5).setFontColor("#9CA3AF");
+        reportSheet.getRange(rowNum, 7).setFontColor("#B91C1C").setFontWeight("bold");
+        reportSheet.getRange(rowNum, 8).setFontColor("#9CA3AF");
       }
       reportSheet.setRowHeight(rowNum, 24);
     }
   }
   
-  // Formatting & Alignment
-  reportSheet.setColumnWidth(1, 130);
-  reportSheet.setColumnWidth(2, 180);
-  reportSheet.setColumnWidth(3, 230);
-  reportSheet.setColumnWidth(4, 150);
-  reportSheet.setColumnWidth(5, 160);
-  reportSheet.getRange("A5:E" + (5 + reportRows.length)).setBorder(true, true, true, true, true, true, "#CBD5E1", SpreadsheetApp.BorderStyle.SOLID);
+  // Formatting & Column Alignment
+  reportSheet.setColumnWidth(1, 110); // Member ID
+  reportSheet.setColumnWidth(2, 160); // Member Name
+  reportSheet.setColumnWidth(3, 210); // Email
+  reportSheet.setColumnWidth(4, 200); // College
+  reportSheet.setColumnWidth(5, 180); // Department
+  reportSheet.setColumnWidth(6, 180); // Position in Workstation
+  reportSheet.setColumnWidth(7, 140); // Attendance Status
+  reportSheet.setColumnWidth(8, 140); // Check-in Time
+  reportSheet.getRange("A5:H" + (5 + reportRows.length)).setBorder(true, true, true, true, true, true, "#CBD5E1", SpreadsheetApp.BorderStyle.SOLID);
   reportSheet.setFrozenRows(5);
   
   return {
@@ -1262,8 +1648,9 @@ function testScanMember() {
     return;
   }
   
-  var sampleMemberId = sheet.getRange("A2").getValue();
-  var sampleToken = sheet.getRange("D2").getValue();
+  var colIdx = getMemberColumnIndices(sheet);
+  var sampleMemberId = sheet.getRange(2, colIdx.id + 1).getValue();
+  var sampleToken = sheet.getRange(2, colIdx.token + 1).getValue();
   
   if (!sampleToken) {
     sampleToken = generateMemberToken(sampleMemberId);
@@ -1276,6 +1663,10 @@ function testScanMember() {
     "🧪 Test Scan Simulation",
     "Scanned Payload: " + testQrData + "\n\n" +
     "Result Status: " + result.status + "\n" +
+    "Member Name: " + (result.name || "N/A") + "\n" +
+    "Position: " + (result.position || "N/A") + "\n" +
+    "Department: " + (result.department || "N/A") + "\n" +
+    "College: " + (result.college || "N/A") + "\n\n" +
     "Message: " + result.message,
     SpreadsheetApp.getUi().ButtonSet.OK
   );
@@ -1341,6 +1732,8 @@ function clearSystemCache() {
   var cache = CacheService.getScriptCache();
   cache.remove("APP_CONFIG_MAP");
   cache.remove("MEMBERS_MAP");
+  cache.remove("MEMBERS_MAP_V2");
+  cache.remove("MEMBERS_MAP_V3");
   try {
     SpreadsheetApp.getActiveSpreadsheet().toast("System cache refreshed successfully!", "🔄 Cache Cleared", 3);
   } catch (e) {}
@@ -1437,6 +1830,7 @@ function getAdminEmailSafe() {
 
 /**
  * Populates 10 realistic sample members and mock attendance logs for instant testing.
+ * Includes College, Department, and Position in Workstation.
  */
 function populateDemoData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1445,48 +1839,48 @@ function populateDemoData() {
   var membersSheet = ss.getSheetByName(SHEET_MEMBERS);
   var logSheet = ss.getSheetByName(SHEET_ATTENDANCE);
   
-  // 10 Sample Members
+  // 10 Realistic Sample Members with academic & workstation constraints
   var demoMembers = [
-    ["WS-001", "Aarav Sharma", "aarav.sharma@example.com", "", "", "No"],
-    ["WS-002", "Priya Patel", "priya.patel@example.com", "", "", "No"],
-    ["WS-003", "Rahul Verma", "rahul.verma@example.com", "", "", "No"],
-    ["WS-004", "Ananya Iyer", "ananya.iyer@example.com", "", "", "No"],
-    ["WS-005", "Vikram Singh", "vikram.singh@example.com", "", "", "No"],
-    ["WS-006", "Sneha Kulkarni", "sneha.kulkarni@example.com", "", "", "No"],
-    ["WS-007", "Rohan Mehta", "rohan.mehta@example.com", "", "", "No"],
-    ["WS-008", "Neha Gupta", "neha.gupta@example.com", "", "", "No"],
-    ["WS-009", "Karthik Raja", "karthik.raja@example.com", "", "", "No"],
-    ["WS-010", "Pooja Deshmukh", "pooja.deshmukh@example.com", "", "", "No"]
+    ["WS-001", "Aarav Sharma", "aarav.sharma@example.com", "College of Engineering Pune", "Computer Engineering", "Lab Lead", "", "", "No"],
+    ["WS-002", "Priya Patel", "priya.patel@example.com", "IIT Bombay", "Data Science & AI", "Research Fellow", "", "", "No"],
+    ["WS-003", "Rahul Verma", "rahul.verma@example.com", "VJTI Mumbai", "Electronics & Telecom", "Hardware Specialist", "", "", "No"],
+    ["WS-004", "Ananya Iyer", "ananya.iyer@example.com", "BITS Pilani", "Information Technology", "Software Intern", "", "", "No"],
+    ["WS-005", "Vikram Singh", "vikram.singh@example.com", "NIT Trichy", "Robotics & Automation", "Project Associate", "", "", "No"],
+    ["WS-006", "Sneha Kulkarni", "sneha.kulkarni@example.com", "MIT World Peace Univ", "Mechanical & Mechatronics", "Lab Assistant", "", "", "No"],
+    ["WS-007", "Rohan Mehta", "rohan.mehta@example.com", "IIIT Hyderabad", "Cyber Security", "Network Admin", "", "", "No"],
+    ["WS-008", "Neha Gupta", "neha.gupta@example.com", "Delhi Technological Univ", "Electrical & Electronics", "Research Intern", "", "", "No"],
+    ["WS-009", "Karthik Raja", "karthik.raja@example.com", "Anna University", "Artificial Intelligence", "ML Specialist", "", "", "No"],
+    ["WS-010", "Pooja Deshmukh", "pooja.deshmukh@example.com", "Walchand College of Eng", "Civil & Infrastructure", "BIM Coordinator", "", "", "No"]
   ];
   
   // Clear existing member data rows (keep header)
   var lastRow = membersSheet.getLastRow();
   if (lastRow > 1) {
-    membersSheet.getRange(2, 1, lastRow - 1, 6).clearContent();
+    membersSheet.getRange(2, 1, lastRow - 1, 9).clearContent();
   }
   
   // Populate new members
-  membersSheet.getRange(2, 1, demoMembers.length, 6).setValues(demoMembers);
+  membersSheet.getRange(2, 1, demoMembers.length, 9).setValues(demoMembers);
   generateMissingTokensAndQrs(membersSheet);
   
-  // Add 6 realistic attendance logs for today
+  // Add 6 realistic attendance logs for today with college, department, position
   var now = new Date();
   var todayDateStr = Utilities.formatDate(now, SCRIPT_TIMEZONE, "yyyy-MM-dd");
   
   var sampleLogs = [
-    [new Date(now.getTime() - 3600000 * 3.5), todayDateStr, "WS-001", "Aarav Sharma", "Present", "Entrance Kiosk 1"],
-    [new Date(now.getTime() - 3600000 * 3.0), todayDateStr, "WS-002", "Priya Patel", "Present", "Entrance Kiosk 1"],
-    [new Date(now.getTime() - 3600000 * 2.2), todayDateStr, "WS-003", "Rahul Verma", "Present", "Entrance Kiosk 2"],
-    [new Date(now.getTime() - 3600000 * 1.8), todayDateStr, "WS-004", "Ananya Iyer", "Present", "Mobile Web Scanner"],
-    [new Date(now.getTime() - 3600000 * 1.2), todayDateStr, "WS-005", "Vikram Singh", "Present", "Entrance Kiosk 1"],
-    [new Date(now.getTime() - 3600000 * 0.4), todayDateStr, "WS-006", "Sneha Kulkarni", "Present", "Entrance Kiosk 2"]
+    [new Date(now.getTime() - 3600000 * 3.5), todayDateStr, "WS-001", "Aarav Sharma", "College of Engineering Pune", "Computer Engineering", "Lab Lead", "Present", "Entrance Kiosk 1"],
+    [new Date(now.getTime() - 3600000 * 3.0), todayDateStr, "WS-002", "Priya Patel", "IIT Bombay", "Data Science & AI", "Research Fellow", "Present", "Entrance Kiosk 1"],
+    [new Date(now.getTime() - 3600000 * 2.2), todayDateStr, "WS-003", "Rahul Verma", "VJTI Mumbai", "Electronics & Telecom", "Hardware Specialist", "Present", "Entrance Kiosk 2"],
+    [new Date(now.getTime() - 3600000 * 1.8), todayDateStr, "WS-004", "Ananya Iyer", "BITS Pilani", "Information Technology", "Software Intern", "Present", "Mobile Web Scanner"],
+    [new Date(now.getTime() - 3600000 * 1.2), todayDateStr, "WS-005", "Vikram Singh", "NIT Trichy", "Robotics & Automation", "Project Associate", "Present", "Entrance Kiosk 1"],
+    [new Date(now.getTime() - 3600000 * 0.4), todayDateStr, "WS-006", "Sneha Kulkarni", "MIT World Peace Univ", "Mechanical & Mechatronics", "Lab Assistant", "Present", "Entrance Kiosk 2"]
   ];
   
   var logLastRow = logSheet.getLastRow();
   if (logLastRow > 1) {
-    logSheet.getRange(2, 1, logLastRow - 1, 6).clearContent();
+    logSheet.getRange(2, 1, logLastRow - 1, 9).clearContent();
   }
-  logSheet.getRange(2, 1, sampleLogs.length, 6).setValues(sampleLogs);
+  logSheet.getRange(2, 1, sampleLogs.length, 9).setValues(sampleLogs);
   
   SpreadsheetApp.getActiveSpreadsheet().toast(
     "10 Members & 6 Check-in Logs populated!",

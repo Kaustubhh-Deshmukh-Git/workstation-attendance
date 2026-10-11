@@ -2,6 +2,11 @@
 
 A complete, production-grade Workstation Attendance System powered by **Google Apps Script** bound to a **Google Sheet** with a mobile-responsive **HTML5 QR Scanner Web App**.
 
+Includes full support for Member profiles, organizational structure, and constraints:
+- 🏛️ **College / Institution**
+- 🔬 **Department / Branch**
+- 💼 **Position in Workstation** (e.g. *Lab Lead, Research Fellow, Hardware Specialist, Intern*)
+
 ---
 
 ## 📌 Architecture & Workflow
@@ -9,17 +14,17 @@ A complete, production-grade Workstation Attendance System powered by **Google A
 ```mermaid
 flowchart TD
     subgraph Admin ["⚙️ Administration"]
-        A[Admin adds Member to Sheet] --> B["setup() / Token Generator"]
+        A["Admin adds Member (College, Dept, Position)"] --> B["setup() / Token Generator"]
         B -->|HMAC-SHA256 Secret| C["Permanent QR: MemberID | Token"]
         C --> D["Custom Menu: 'Send QR Codes'"]
-        D -->|MailApp with Inline & Attachment| E["Member Receives QR ID Badge via Email"]
+        D -->|MailApp with Inline & Attachment| E["Member Receives QR ID Badge with Position & College"]
     end
 
     subgraph Entrance ["🚪 Entrance Kiosk / Smartphone"]
         E --> F["Member shows QR Badge"]
         G["Scanner Web App (Scanner.html)"] -->|Camera / USB Scanner| H["Scan QR Code"]
         F -.-> H
-        H -->|google.script.run| I["markAttendance(qrData)"]
+        H -->|HTTP POST| I["markAttendance(qrData)"]
     end
 
     subgraph Server ["☁️ Google Apps Script Backend (Code.gs)"]
@@ -27,8 +32,8 @@ flowchart TD
         J -->|Yes| K{"2. HMAC Signature Valid?"}
         K -->|Yes| L{"3. Within Check-in Window?"}
         L -->|Yes| M{"4. Already Scanned Today?"}
-        M -->|No| N["Append to 'Attendance_Log'"]
-        N --> O["Return SUCCESS (Green)"]
+        M -->|No| N["Append to 'Attendance_Log' with College, Dept & Position"]
+        N --> O["Return SUCCESS (Green) with Position & College Tags"]
         M -->|Yes| P["Return ALREADY_MARKED (Amber)"]
         K -->|No| Q["Return INVALID / COUNTERFEIT (Red)"]
         L -->|No| R["Return OUTSIDE_HOURS (Red)"]
@@ -36,7 +41,7 @@ flowchart TD
 
     subgraph Reporting ["📊 End-of-Day Reporting"]
         S["Time-driven Trigger (e.g. 21:00)"] --> T["generateDailyReport()"]
-        T --> U["Create Sheet: Report_YYYY-MM-DD"]
+        T --> U["Create Sheet: Report_YYYY-MM-DD with 8 Columns"]
         T --> V["Email KPI Summary & Link to Admin"]
     end
 ```
@@ -48,11 +53,27 @@ flowchart TD
 ```
 d:\Workstation Attendance system\
 ├── appsscript.json        # Manifest file with Asia/Kolkata timezone & scopes
-├── Code.gs                # Complete backend logic (HMAC, Sheets, MailApp, Reports)
-├── Scanner.html           # Modern glassmorphism Web App with HTML5-QRCode & Web Audio
-├── sample_members.csv     # Sample CSV format with 5 dummy members
+├── Code.gs                # Complete backend logic (HMAC, Sheets, MailApp, Reports, Member Constraints)
+├── Scanner.html           # Modern glassmorphism Web App with HTML5-QRCode, Live Meta Pills & Web Audio
+├── sample_members.csv     # Sample CSV with College, Department, and Position constraints
 └── README.md              # Complete setup and operational guide
 ```
+
+---
+
+## 🏛️ Member Schema & Constraints
+
+| Column | Field Name | Description | Example |
+|---|---|---|---|
+| **A** | `Member ID` | Unique permanent identifier | `WS-001` |
+| **B** | `Name` | Full name of the member | `Aarav Sharma` |
+| **C** | `Email` | Recipient email address | `aarav.sharma@example.com` |
+| **D** | `College` | College, University, or Institute | `College of Engineering Pune` |
+| **E** | `Department` | Academic or technical department | `Computer Engineering` |
+| **F** | `Position in Workstation` | Role / designation inside the workstation | `Lab Lead` |
+| **G** | `Token` | Cryptographic HMAC-SHA256 signature | *(Auto-generated)* |
+| **H** | `QR Link` | Direct link to high-res QR code image | *(Auto-generated)* |
+| **I** | `Email Sent` | Status flag (`Yes` or `No`) | `No` |
 
 ---
 
@@ -95,8 +116,8 @@ d:\Workstation Attendance system\
 4. Once `setup` finishes execution:
    - Return to your Google Spreadsheet tab and refresh the page.
    - You will see 3 sheets created and styled:
-     1. **`Members`**: Pre-filled with 5 sample members, tokens, and QR links.
-     2. **`Attendance_Log`**: Ready to record check-in events.
+     1. **`Members`**: Pre-filled with sample members having `College`, `Department`, and `Position in Workstation`.
+     2. **`Attendance_Log`**: Ready to record check-in events with 9 columns.
      3. **`Config`**: Pre-filled with workstation settings.
    - A new custom menu **🏢 Workstation Attendance** will appear in the top menu bar.
 
@@ -119,22 +140,25 @@ d:\Workstation Attendance system\
 
 ### 1. Sending QR Badges to Members (`Feature 1`)
 1. Open the Google Sheet &rarr; Click menu **🏢 Workstation Attendance** &rarr; **📧 Send QR Codes to Members**.
-2. **Standard Gmail vs High Volume (Same-Day 300+ emails)**:
+2. **Badge Content**: Emailed passes display the member's **Position**, **Department**, **College**, and permanent QR badge.
+3. **Email Provider Setup (Gmail / Brevo / Resend)**:
    - **Gmail (Default)**: Free Google accounts send up to 100 emails/day.
    - **Brevo API (300 Free/Day)** or **Resend (3,000 Free/Month)**:
      - Click **🏢 Workstation Attendance** &rarr; **⚡ Email Provider Setup (Brevo / Resend / Gmail)**.
-     - Select **Brevo** or **Resend**, paste your free API key, and click **Save Settings**.
-     - Now you can send 300+ emails in a single click in one day without hitting Gmail quota limits!
-3. **Alternative: Export All QR Badges to Google Drive**:
+     - Paste your free API key, and click **Save Settings** to bypass Gmail quota limits.
+4. **Alternative: Export All QR Badges to Google Drive**:
    - Click **🏢 Workstation Attendance** &rarr; **📁 Export All QR Badges to Google Drive**.
-   - Generates individual PNG badges (`WS-001_Aarav_Sharma.png`) inside a new Google Drive folder for instant ZIP download or WhatsApp sharing.
+   - Generates individual PNG badges (`WS-001_Aarav_Sharma.png`) inside a new Google Drive folder.
 
-### 2. Adding New Members
+### 2. Adding New Members with Constraints
 1. Go to the **`Members`** sheet.
 2. Add a new row:
-   - Column A: `WS-006`
+   - Column A: `WS-011`
    - Column B: `Member Name`
    - Column C: `member.email@example.com`
+   - Column D: `College / University Name`
+   - Column E: `Department`
+   - Column F: `Position in Workstation` (e.g. *Research Intern*)
    - Leave `Token` and `QR Link` blank; set `Email Sent` to `No`.
 3. Click **🏢 Workstation Attendance** &rarr; **🚀 Initialize / Refresh System Setup**.
 4. The system will automatically compute the cryptographic HMAC token and QR code URL for the new member!
@@ -143,19 +167,18 @@ d:\Workstation Attendance system\
 ### 3. Using the Scanner Web App (`Feature 2 & 3`)
 - Open the Web App URL on any smartphone, iPad/tablet, or laptop webcam.
 - **Camera Scanning**: Present the QR code on the phone screen or printed card within the reticle.
-- **Audio Feedback**: The scanner chirps with a high chime for success, warning double-beep for duplicate scans, and a buzz tone for errors.
-- **Result Screen**:
-  - 🟢 **Green ("Welcome, [Name]!")**: Check-in logged with timestamp.
+- **Instant Visual Identification**:
+  - 🟢 **Green ("Welcome, [Name]!")**: Check-in logged with timestamp, position badge (`💼 Lab Lead`), and academic tag (`🔬 Computer Eng • COEP`).
   - 🟠 **Amber ("[Name], already marked present today")**: Duplicate scan prevented.
   - 🔴 **Red ("Outside Check-in Window" / "Invalid QR")**: Access denied.
-- **Auto-Reset**: Resets back to continuous scanning in 3 seconds.
+- **Auto-Reset**: Resets back to continuous scanning in 1.8 seconds.
 - **USB Scanner / Manual Fallback**: Connect a USB handheld barcode reader or type `WS-001|<token>` into the input box below the camera.
 
 ### 4. End-of-Day Daily Attendance Report (`Feature 4`)
 - **Automated Scheduling**:
   1. Click **🏢 Workstation Attendance** &rarr; **⏰ Setup Daily Report Trigger**.
   2. The system reads the `Report Generation Time` from `Config` (e.g., `21:00`) and automatically runs at that hour every evening.
-  3. It generates a new sheet **`Report_YYYY-MM-DD`**, color-codes Present (Green) vs Absent (Red), and emails the summary KPI to the `Admin Email`.
+  3. It generates a new sheet **`Report_YYYY-MM-DD`** with all 8 columns (`Member ID`, `Name`, `Email`, `College`, `Department`, `Position`, `Status`, `Check-in Time`), color-codes Present (Green) vs Absent (Red), and emails the summary KPI to the `Admin Email`.
 - **Manual Generation**:
   - Click **🏢 Workstation Attendance** &rarr; **📊 Generate Today's Report** anytime to produce today's report on demand.
 
@@ -174,37 +197,8 @@ d:\Workstation Attendance system\
 
 ---
 
-## 🖨️ Entrance Poster / QR Signage Guide
-
-To set up a self-service check-in station at the workstation entrance:
-
-1. **Kiosk Tablet Setup**:
-   - Mount a tablet or old smartphone on a stand at the entrance.
-   - Open the deployed Web App URL in full-screen (Chrome &rarr; *Add to Home Screen* for a clean kiosk mode).
-2. **Entrance Poster (Alternative)**:
-   - Generate a QR code linking to your Web App URL.
-   - Print a sign: *"Scan here to check in with your Workstation QR"* and place it at the front desk.
-
----
-
 ## 🔒 Security & Anti-Counterfeiting Details
 
 - **Cryptographic Signing**: Each token is calculated using `HMAC-SHA256(MemberID, SecretKey)`.
 - **Protected Secret**: The `HMAC_SECRET_KEY` is stored in Google Apps Script `ScriptProperties` (never exposed to client-side code or spreadsheet viewers).
 - **Concurrency Protection**: Check-in transactions utilize `LockService.getScriptLock()` to prevent race conditions when multiple members scan simultaneously.
-
----
-
-## 🛠️ Troubleshooting & FAQs
-
-### Q1: The camera shows a black screen or "Camera Access Blocked".
-- **Cause**: Google Apps Script's editor test preview embeds the page inside a sandboxed `iframe` without camera permissions.
-- **Fix**: Open the standalone Web App URL (`https://script.google.com/macros/s/.../exec`) directly in Chrome or Safari and click **Allow** on the camera permission prompt.
-
-### Q2: How do I change the Timezone?
-- Open `appsscript.json` and verify `"timeZone": "Asia/Kolkata"`. You can change this to any valid tz database string (e.g. `America/New_York`, `Europe/London`). Also update `SCRIPT_TIMEZONE` in `Code.gs`.
-
-### Q3: Daily Email Quota
-- Free Google accounts (@gmail.com) have a quota of **100 emails/day**.
-- Google Workspace accounts have a quota of **1,500 emails/day**.
-- The script checks `MailApp.getRemainingDailyQuota()` and skips sending if the quota is reached.

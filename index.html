@@ -324,7 +324,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: 20px 24px;
       text-align: center;
       animation: pop-in 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
@@ -350,13 +350,13 @@
     }
 
     .result-icon-circle {
-      width: 60px;
-      height: 60px;
+      width: 54px;
+      height: 54px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
     .success .result-icon-circle {
@@ -378,19 +378,19 @@
     }
 
     .result-icon-circle svg {
-      width: 30px;
-      height: 30px;
+      width: 28px;
+      height: 28px;
     }
 
     .result-title {
-      font-size: 1.15rem;
+      font-size: 1.1rem;
       font-weight: 800;
       color: #fff;
       margin-bottom: 4px;
     }
 
     .result-name {
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       font-weight: 700;
       color: var(--accent-cyan);
       margin-bottom: 2px;
@@ -398,20 +398,74 @@
 
     .result-id-badge {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.78rem;
+      font-size: 0.74rem;
       background: rgba(255, 255, 255, 0.08);
-      padding: 3px 10px;
+      padding: 2px 8px;
       border-radius: 6px;
       color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    /* Academic & Workstation Meta in Result Overlay */
+    .result-meta-box {
+      margin-top: 2px;
       margin-bottom: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      width: 100%;
+    }
+
+    .result-pills-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .meta-pill {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      letter-spacing: 0.02em;
+    }
+
+    .meta-position {
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.45);
+      color: #93c5fd;
+    }
+
+    .meta-dept {
+      background: rgba(139, 92, 246, 0.2);
+      border: 1px solid rgba(139, 92, 246, 0.45);
+      color: #c4b5fd;
+    }
+
+    .meta-college {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .result-message {
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       color: var(--text-muted);
-      line-height: 1.4;
-      max-width: 280px;
-      margin-bottom: 12px;
+      line-height: 1.35;
+      max-width: 300px;
+      margin-bottom: 10px;
     }
 
     .countdown-bar-container {
@@ -481,7 +535,7 @@
     .btn-icon-action.active {
       color: var(--accent-cyan);
       border-color: rgba(6, 182, 212, 0.4);
-      background: rgba(6, 182, 212, 0.12);
+      background: rgba(6, 182, 212, 0.1);
     }
 
     .status-indicator {
@@ -489,21 +543,19 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      font-size: 0.8rem;
-      font-weight: 600;
+      font-size: 0.75rem;
       color: var(--text-muted);
-      margin-top: 12px;
+      margin-top: 10px;
     }
 
     .status-indicator-dot {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      background: var(--accent-cyan);
-      box-shadow: 0 0 8px var(--accent-cyan);
+      background: var(--text-dim);
     }
 
-    /* ---------------- MANUAL ENTRY / USB SCANNER ---------------- */
+    /* ---------------- MANUAL ENTRY CARD ---------------- */
     .manual-entry-card {
       background: var(--surface-glass);
       backdrop-filter: blur(16px);
@@ -515,10 +567,12 @@
     }
 
     .manual-entry-label {
-      font-size: 0.78rem;
-      font-weight: 600;
+      font-size: 0.75rem;
+      font-weight: 700;
       color: var(--text-muted);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -537,13 +591,13 @@
       padding: 10px 14px;
       color: #fff;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       outline: none;
+      transition: border-color 0.2s;
     }
 
     .manual-input:focus {
       border-color: var(--accent-cyan);
-      box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
     }
 
     .manual-submit-btn {
@@ -590,7 +644,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-height: 220px;
+      max-height: 240px;
       overflow-y: auto;
     }
 
@@ -622,11 +676,39 @@
       height: 8px;
       border-radius: 50%;
       background: var(--color-success);
+      flex-shrink: 0;
+    }
+
+    .feed-name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
     }
 
     .feed-name {
       font-weight: 600;
       color: #fff;
+    }
+
+    .feed-pos-tag {
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: rgba(59, 130, 246, 0.2);
+      color: #93c5fd;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      padding: 1px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .feed-id-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 2px;
+      flex-wrap: wrap;
     }
 
     .feed-id {
@@ -635,10 +717,17 @@
       color: var(--text-dim);
     }
 
+    .feed-sub {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+    }
+
     .feed-time {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.75rem;
       color: var(--accent-cyan);
+      flex-shrink: 0;
+      margin-left: 8px;
     }
 
     .empty-feed {
@@ -813,6 +902,16 @@
           <div class="result-title" id="result-title">Title</div>
           <div class="result-name" id="result-name"></div>
           <div class="result-id-badge" id="result-id"></div>
+          
+          <!-- Member Profile & Workstation Constraints -->
+          <div class="result-meta-box" id="result-meta" style="display:none;">
+            <div class="result-pills-row">
+              <span class="meta-pill meta-position" id="result-pos" style="display:none;"></span>
+              <span class="meta-pill meta-dept" id="result-dept" style="display:none;"></span>
+            </div>
+            <div class="meta-college" id="result-college" style="display:none;"></div>
+          </div>
+
           <div class="result-message" id="result-message"></div>
           <div class="countdown-bar-container">
             <div class="countdown-bar-fill" id="countdown-bar"></div>
@@ -972,29 +1071,33 @@
     }
 
     // ------------------------------------------------------------------------
-    // ⚡ HIGH-PERFORMANCE IN-BROWSER CAMERA SCANNER (10X REDUCED CPU COMPUTE)
+    // ⚡ HIGH-PERFORMANCE IN-BROWSER CAMERA SCANNER
     // ------------------------------------------------------------------------
     async function startContinuousScanner() {
       getAudioContext();
       const statusText = document.getElementById('status-text');
       const errBanner = document.getElementById('camera-error-banner');
-      errBanner.style.display = 'none';
+      const video = document.getElementById('live-video');
+
       statusText.innerText = "Requesting Camera Access...";
+      errBanner.style.display = 'none';
 
       if (videoStream) {
         videoStream.getTracks().forEach(track => track.stop());
         videoStream = null;
       }
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
 
-      const video = document.getElementById('live-video');
       const constraints = {
-        audio: false,
         video: {
           facingMode: { ideal: currentFacingMode },
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 }
-        }
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
       };
 
       try {
@@ -1040,7 +1143,7 @@
 
         if (video.readyState >= video.HAVE_CURRENT_DATA && !isProcessing) {
           if (video.videoWidth > 0 && video.videoHeight > 0) {
-            // Downscale scan resolution to max 480px width for 10x faster pixel analysis
+            // Downscale scan resolution to max 480px width for fast pixel analysis
             const targetWidth = Math.min(480, video.videoWidth);
             const scale = targetWidth / video.videoWidth;
             const targetHeight = Math.round(video.videoHeight * scale);
@@ -1144,8 +1247,40 @@
       const msgEl = document.getElementById('result-message');
       const countdownBar = document.getElementById('countdown-bar');
 
+      const metaBox = document.getElementById('result-meta');
+      const posEl = document.getElementById('result-pos');
+      const deptEl = document.getElementById('result-dept');
+      const collegeEl = document.getElementById('result-college');
+
       overlay.className = 'result-overlay';
       
+      var hasMeta = false;
+      if (res.position) {
+        posEl.innerHTML = `💼 ${escapeHtml(res.position)}`;
+        posEl.style.display = 'inline-flex';
+        hasMeta = true;
+      } else {
+        posEl.style.display = 'none';
+      }
+
+      if (res.department) {
+        deptEl.innerHTML = `🔬 ${escapeHtml(res.department)}`;
+        deptEl.style.display = 'inline-flex';
+        hasMeta = true;
+      } else {
+        deptEl.style.display = 'none';
+      }
+
+      if (res.college) {
+        collegeEl.innerHTML = `🏛️ ${escapeHtml(res.college)}`;
+        collegeEl.style.display = 'inline-flex';
+        hasMeta = true;
+      } else {
+        collegeEl.style.display = 'none';
+      }
+
+      metaBox.style.display = hasMeta ? 'flex' : 'none';
+
       if (res.success) {
         overlay.classList.add('success');
         iconEl.innerHTML = `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>`;
@@ -1156,7 +1291,7 @@
         msgEl.innerText = res.message || 'Attendance marked successfully in Google Sheet.';
         playTone(880, 0.1, 'sine', 0);
         playTone(1174, 0.15, 'sine', 0.08);
-        addFeedItem(res.name, res.memberId, res.time || new Date().toLocaleTimeString());
+        addFeedItem(res.name, res.memberId, res.time || new Date().toLocaleTimeString(), res.position, res.department, res.college);
       } else if (res.status === 'ALREADY_MARKED') {
         overlay.classList.add('warning');
         iconEl.innerHTML = `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
@@ -1172,6 +1307,7 @@
         titleEl.innerText = res.title || 'Access Denied';
         nameEl.innerText = res.name || '';
         idEl.style.display = 'none';
+        metaBox.style.display = 'none';
         msgEl.innerText = res.message || 'Invalid QR code.';
         playTone(220, 0.25, 'sawtooth', 0);
       }
@@ -1179,30 +1315,39 @@
       overlay.style.display = 'flex';
       countdownBar.style.animation = 'none';
       void countdownBar.offsetWidth;
-      countdownBar.style.animation = 'countdown 1.6s linear forwards';
+      countdownBar.style.animation = 'countdown 1.8s linear forwards';
 
-      // Fast auto-dismiss in 1.6s for high-speed queue scanning
+      // Auto-dismiss in 1.8s for smooth continuous scanning
       setTimeout(() => {
         overlay.style.display = 'none';
         isProcessing = false;
         document.getElementById('status-dot').style.background = 'var(--accent-cyan)';
         document.getElementById('status-text').innerText = "Scanner Active \u2022 Continuous Real-Time";
-      }, 1600);
+      }, 1800);
     }
 
-    function addFeedItem(name, id, time) {
+    function addFeedItem(name, id, time, position, department, college) {
       const feedList = document.getElementById('feed-list');
       const emptyFeed = document.getElementById('empty-feed');
       if (emptyFeed) emptyFeed.remove();
 
       const item = document.createElement('div');
       item.className = 'feed-item';
+      
+      const academicDetails = [department, college].filter(Boolean).join(' • ');
+
       item.innerHTML = `
         <div class="feed-item-left">
           <div class="feed-status-dot"></div>
           <div>
-            <div class="feed-name">${escapeHtml(name)}</div>
-            <div class="feed-id">${escapeHtml(id)}</div>
+            <div class="feed-name-row">
+              <span class="feed-name">${escapeHtml(name)}</span>
+              ${position ? `<span class="feed-pos-tag">${escapeHtml(position)}</span>` : ''}
+            </div>
+            <div class="feed-id-row">
+              <span class="feed-id">${escapeHtml(id)}</span>
+              ${academicDetails ? `<span class="feed-sub">&bull; ${escapeHtml(academicDetails)}</span>` : ''}
+            </div>
           </div>
         </div>
         <div class="feed-time">${escapeHtml(time)}</div>
